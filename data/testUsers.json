@@ -1,0 +1,26 @@
+{
+  "validUser": {
+    "id": 1,
+    "name": "John Doe",
+    "username": "johndoe",
+    "email": "john.doe@example.com",
+    "phone": "1-770-736-8031",
+    "website": "hildegard.org"
+  },
+  "testUser1": {
+    "id": 2,
+    "name": "Jane Smith",
+    "username": "janesmith",
+    "email": "jane.smith@example.com",
+    "phone": "1-123-456-7890",
+    "website": "janesmith.com"
+  },
+  "adminUser": {
+    "id": 100,
+    "name": "Admin User",
+    "username": "admin",
+    "email": "admin@example.com",
+    "phone": "1-999-999-9999",
+    "website": "admin.com"
+  }
+}

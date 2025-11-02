@@ -1,0 +1,17 @@
+{
+  "validPost": {
+    "userId": 1,
+    "title": "Test Post Title",
+    "body": "This is a test post body with some content."
+  },
+  "longPost": {
+    "userId": 1,
+    "title": "A Very Long Post Title That Exceeds Normal Length",
+    "body": "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat."
+  },
+  "shortPost": {
+    "userId": 1,
+    "title": "Short",
+    "body": "Brief."
+  }
+}
