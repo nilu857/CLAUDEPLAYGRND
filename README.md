@@ -41,6 +41,7 @@ playwright-api-testing-framework/
 │   ├── DataGenerator.ts        # Test data generator
 │   └── ApiHelper.ts            # API helper functions
 ├── tests/api/                   # API test suites
+│   ├── demo.api.spec.ts        # Demo tests using DummyJSON API
 │   ├── users.api.spec.ts       # User API tests
 │   ├── posts.api.spec.ts       # Post API tests
 │   └── advanced.api.spec.ts    # Advanced testing scenarios
@@ -77,7 +78,37 @@ npm install
 cp .env.example .env
 ```
 
-4. Update the `.env` file with your API configuration:
+4. The framework comes pre-configured with **DummyJSON** (https://dummyjson.com), a free demo REST API that you can use to run tests immediately without any additional setup.
+
+### Demo API - DummyJSON
+
+The framework is pre-configured to use **DummyJSON** as the demo API. This allows you to run tests immediately without setting up your own API.
+
+**Features:**
+- 🎯 Free and public REST API
+- 📦 Realistic data (users, posts, products, comments, carts, etc.)
+- 🔄 Supports all HTTP methods (GET, POST, PUT, PATCH, DELETE)
+- 📄 Pagination support
+- 🔍 Search and filter capabilities
+- 🔐 Authentication endpoints
+- 📚 Full documentation at https://dummyjson.com/docs
+
+**Quick Start with Demo API:**
+```bash
+# Install dependencies first
+npm install
+
+# Run the demo tests (no configuration needed!)
+npx playwright test tests/api/demo.api.spec.ts
+
+# Run all tests with the demo API
+npm test
+```
+
+**Note:** The tests require internet access to reach the DummyJSON API. If running in a restricted network environment, you may need to configure proxy settings or use a local mock server.
+
+**Using Your Own API:**
+If you want to test your own API instead, simply update the `.env` file:
 ```env
 API_BASE_URL=https://your-api-url.com
 API_KEY=your_api_key
