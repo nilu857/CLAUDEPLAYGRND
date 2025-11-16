@@ -9,7 +9,7 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
  */
 export class Environment {
   static get baseURL(): string {
-    return process.env.API_BASE_URL || 'https://jsonplaceholder.typicode.com';
+    return process.env.API_BASE_URL || 'https://dummyjson.com';
   }
 
   static get devBaseURL(): string {

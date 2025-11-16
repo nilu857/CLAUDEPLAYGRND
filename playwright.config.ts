@@ -30,7 +30,7 @@ export default defineConfig({
   // Global test settings
   use: {
     // Base URL for API requests
-    baseURL: process.env.API_BASE_URL || 'https://jsonplaceholder.typicode.com',
+    baseURL: process.env.API_BASE_URL || 'https://dummyjson.com',
 
     // Extra HTTP headers
     extraHTTPHeaders: {
@@ -54,21 +54,21 @@ export default defineConfig({
       name: 'API Tests - Development',
       testMatch: /.*\.api\.spec\.ts/,
       use: {
-        baseURL: process.env.DEV_API_BASE_URL || 'https://jsonplaceholder.typicode.com',
+        baseURL: process.env.DEV_API_BASE_URL || 'https://dummyjson.com',
       },
     },
     {
       name: 'API Tests - Staging',
       testMatch: /.*\.api\.spec\.ts/,
       use: {
-        baseURL: process.env.STAGING_API_BASE_URL || 'https://jsonplaceholder.typicode.com',
+        baseURL: process.env.STAGING_API_BASE_URL || 'https://dummyjson.com',
       },
     },
     {
       name: 'API Tests - Production',
       testMatch: /.*\.api\.spec\.ts/,
       use: {
-        baseURL: process.env.PROD_API_BASE_URL || 'https://jsonplaceholder.typicode.com',
+        baseURL: process.env.PROD_API_BASE_URL || 'https://dummyjson.com',
       },
     },
   ],
