@@ -15,6 +15,8 @@
 11. [Best Practices](#best-practices)
 12. [Common Patterns and Examples](#common-patterns-and-examples)
 13. [Troubleshooting](#troubleshooting)
+14. [Test Recording and Reporting Best Practices](#test-recording-and-reporting-best-practices)
+15. [Reporting: Allure vs Playwright HTML Report](#reporting-allure-vs-playwright-html-report)
 
 ---
 
@@ -2221,6 +2223,843 @@ npx playwright show-report
 ```
 
 Click on a test to see network requests and responses.
+
+---
+
+## Test Recording and Reporting Best Practices
+
+### Why Record Test Details?
+
+Recording comprehensive test details is crucial for:
+
+1. **Debugging Failures**: Understand what went wrong when tests fail
+2. **Audit Trail**: Track what was tested and when
+3. **Collaboration**: Help team members understand test execution
+4. **Compliance**: Provide evidence of testing for regulatory requirements
+5. **Performance Analysis**: Track response times and identify bottlenecks
+6. **Historical Trends**: Analyze test stability over time
+
+### What to Record
+
+#### 1. Essential Information
+
+Always record these details for every test:
+
+```typescript
+import { test, expect } from '@playwright/test';
+
+test('Example with comprehensive logging', async ({ request }) => {
+  const testStartTime = Date.now();
+
+  console.log('='.repeat(50));
+  console.log(`Test: ${test.info().title}`);
+  console.log(`Started at: ${new Date().toISOString()}`);
+  console.log('='.repeat(50));
+
+  // Test execution
+  const requestStartTime = Date.now();
+  const response = await request.get('/users/1');
+  const requestDuration = Date.now() - requestStartTime;
+
+  // Log request details
+  console.log('\n📤 REQUEST:');
+  console.log(`  Method: GET`);
+  console.log(`  URL: /users/1`);
+  console.log(`  Duration: ${requestDuration}ms`);
+
+  // Log response details
+  console.log('\n📥 RESPONSE:');
+  console.log(`  Status: ${response.status()}`);
+  console.log(`  Content-Type: ${response.headers()['content-type']}`);
+
+  const body = await response.json();
+  console.log(`  Body: ${JSON.stringify(body, null, 2)}`);
+
+  // Assertions
+  expect(response.status()).toBe(200);
+
+  const testDuration = Date.now() - testStartTime;
+  console.log(`\n✅ Test completed in ${testDuration}ms`);
+});
+```
+
+#### 2. Request and Response Data
+
+**Create a Logger Helper:**
+
+Create `utils/TestLogger.ts`:
+
+```typescript
+export class TestLogger {
+  static logRequest(method: string, url: string, data?: any, headers?: any) {
+    console.log('\n📤 API REQUEST:');
+    console.log(`  Timestamp: ${new Date().toISOString()}`);
+    console.log(`  Method: ${method}`);
+    console.log(`  URL: ${url}`);
+
+    if (headers) {
+      console.log(`  Headers:`);
+      Object.entries(headers).forEach(([key, value]) => {
+        // Mask sensitive data
+        if (key.toLowerCase().includes('auth') || key.toLowerCase().includes('key')) {
+          console.log(`    ${key}: ****`);
+        } else {
+          console.log(`    ${key}: ${value}`);
+        }
+      });
+    }
+
+    if (data) {
+      console.log(`  Body: ${JSON.stringify(data, null, 2)}`);
+    }
+  }
+
+  static logResponse(response: any, duration: number, body?: any) {
+    console.log('\n📥 API RESPONSE:');
+    console.log(`  Timestamp: ${new Date().toISOString()}`);
+    console.log(`  Status: ${response.status()}`);
+    console.log(`  Duration: ${duration}ms`);
+    console.log(`  Headers:`);
+
+    const headers = response.headers();
+    Object.entries(headers).forEach(([key, value]) => {
+      console.log(`    ${key}: ${value}`);
+    });
+
+    if (body) {
+      console.log(`  Body: ${JSON.stringify(body, null, 2)}`);
+    }
+  }
+
+  static logAssertion(description: string, expected: any, actual: any, passed: boolean) {
+    const icon = passed ? '✅' : '❌';
+    console.log(`\n${icon} ASSERTION: ${description}`);
+    console.log(`  Expected: ${JSON.stringify(expected)}`);
+    console.log(`  Actual: ${JSON.stringify(actual)}`);
+    console.log(`  Result: ${passed ? 'PASSED' : 'FAILED'}`);
+  }
+
+  static logError(error: Error) {
+    console.error('\n❌ ERROR:');
+    console.error(`  Message: ${error.message}`);
+    console.error(`  Stack: ${error.stack}`);
+  }
+
+  static logTestStep(stepNumber: number, description: string) {
+    console.log(`\n📋 Step ${stepNumber}: ${description}`);
+  }
+
+  static logSeparator(title?: string) {
+    console.log('\n' + '='.repeat(70));
+    if (title) {
+      console.log(`  ${title}`);
+      console.log('='.repeat(70));
+    }
+  }
+}
+```
+
+**Using the Logger:**
+
+```typescript
+import { TestLogger } from '../../utils/TestLogger';
+
+test('Using TestLogger for detailed recording', async ({ request }) => {
+  TestLogger.logSeparator('CREATE USER TEST');
+
+  // Step 1: Prepare data
+  TestLogger.logTestStep(1, 'Prepare test data');
+  const newUser = {
+    name: 'John Doe',
+    email: 'john@example.com'
+  };
+  console.log('Test data:', newUser);
+
+  // Step 2: Send request
+  TestLogger.logTestStep(2, 'Send POST request to create user');
+  TestLogger.logRequest('POST', '/users', newUser);
+
+  const startTime = Date.now();
+  const response = await request.post('/users', { data: newUser });
+  const duration = Date.now() - startTime;
+
+  const responseBody = await response.json();
+  TestLogger.logResponse(response, duration, responseBody);
+
+  // Step 3: Verify response
+  TestLogger.logTestStep(3, 'Verify response');
+  const statusMatch = response.status() === 201;
+  TestLogger.logAssertion('Status code is 201', 201, response.status(), statusMatch);
+  expect(statusMatch).toBeTruthy();
+
+  TestLogger.logSeparator('TEST COMPLETED');
+});
+```
+
+#### 3. Attachments in Playwright
+
+Playwright allows you to attach files, screenshots, and data to test reports:
+
+```typescript
+import { test } from '@playwright/test';
+
+test('Test with attachments', async ({ request }, testInfo) => {
+  const response = await request.get('/users/1');
+  const body = await response.json();
+
+  // Attach JSON response
+  await testInfo.attach('response-body', {
+    body: JSON.stringify(body, null, 2),
+    contentType: 'application/json'
+  });
+
+  // Attach request details
+  await testInfo.attach('request-details', {
+    body: JSON.stringify({
+      method: 'GET',
+      url: '/users/1',
+      timestamp: new Date().toISOString(),
+      status: response.status()
+    }, null, 2),
+    contentType: 'application/json'
+  });
+
+  // Attach performance metrics
+  const performanceData = {
+    testDuration: testInfo.duration,
+    status: response.status(),
+    timestamp: Date.now()
+  };
+
+  await testInfo.attach('performance-metrics', {
+    body: JSON.stringify(performanceData, null, 2),
+    contentType: 'application/json'
+  });
+});
+```
+
+#### 4. Custom Test Metadata
+
+Add custom annotations to track test metadata:
+
+```typescript
+test('Critical user creation test', async ({ request }, testInfo) => {
+  // Add custom annotations
+  testInfo.annotations.push(
+    { type: 'priority', description: 'critical' },
+    { type: 'jira', description: 'PROJ-123' },
+    { type: 'author', description: 'john.doe@example.com' },
+    { type: 'execution-time', description: new Date().toISOString() }
+  );
+
+  // Test implementation
+  const response = await request.post('/users', {
+    data: { name: 'Test User', email: 'test@example.com' }
+  });
+
+  expect(response.status()).toBe(201);
+});
+```
+
+### Performance Tracking
+
+Create a performance tracking helper:
+
+```typescript
+// utils/PerformanceTracker.ts
+export class PerformanceTracker {
+  private metrics: Map<string, number[]> = new Map();
+
+  recordMetric(name: string, value: number) {
+    if (!this.metrics.has(name)) {
+      this.metrics.set(name, []);
+    }
+    this.metrics.get(name)!.push(value);
+  }
+
+  getMetrics(name: string) {
+    const values = this.metrics.get(name) || [];
+    if (values.length === 0) return null;
+
+    return {
+      min: Math.min(...values),
+      max: Math.max(...values),
+      avg: values.reduce((a, b) => a + b, 0) / values.length,
+      count: values.length
+    };
+  }
+
+  getAllMetrics() {
+    const result: any = {};
+    this.metrics.forEach((values, name) => {
+      result[name] = this.getMetrics(name);
+    });
+    return result;
+  }
+
+  generateReport() {
+    console.log('\n📊 PERFORMANCE REPORT:');
+    console.log('='.repeat(70));
+
+    this.metrics.forEach((values, name) => {
+      const stats = this.getMetrics(name);
+      console.log(`\n${name}:`);
+      console.log(`  Calls: ${stats?.count}`);
+      console.log(`  Min: ${stats?.min}ms`);
+      console.log(`  Max: ${stats?.max}ms`);
+      console.log(`  Avg: ${stats?.avg.toFixed(2)}ms`);
+    });
+
+    console.log('\n' + '='.repeat(70));
+  }
+}
+
+// Usage
+test('Performance tracking example', async ({ request }) => {
+  const tracker = new PerformanceTracker();
+
+  for (let i = 1; i <= 5; i++) {
+    const start = Date.now();
+    await request.get(`/users/${i}`);
+    const duration = Date.now() - start;
+
+    tracker.recordMetric('GET /users/:id', duration);
+  }
+
+  tracker.generateReport();
+});
+```
+
+---
+
+## Reporting: Allure vs Playwright HTML Report
+
+### Overview Comparison
+
+| Feature | Playwright HTML Report | Allure Report |
+|---------|------------------------|---------------|
+| **Setup Complexity** | 🟢 Built-in, zero config | 🟡 Requires installation & setup |
+| **Visual Appeal** | 🟢 Clean, modern UI | 🟢 Professional, highly visual |
+| **Historical Trends** | ❌ Single run only | ✅ Track trends over time |
+| **Categories & Suites** | ✅ Basic grouping | ✅ Advanced categorization |
+| **Attachments** | ✅ Screenshots, traces | ✅ Any file type, rich media |
+| **Test Steps** | ⚠️ Limited | ✅ Detailed step-by-step view |
+| **Filtering** | ✅ Basic filtering | ✅ Advanced filtering & search |
+| **Retries Visualization** | ✅ Shows retry attempts | ✅ Shows retry attempts |
+| **Environment Info** | ⚠️ Limited | ✅ Comprehensive env details |
+| **Custom Metadata** | ⚠️ Via annotations | ✅ Extensive metadata support |
+| **Integration** | 🟢 Perfect with Playwright | 🟢 Works with many frameworks |
+| **CI/CD Hosting** | ⚠️ Requires custom solution | ✅ Many hosting options available |
+| **Real-time Updates** | ❌ Post-execution only | ❌ Post-execution only |
+| **Mobile Friendly** | ✅ Responsive design | ✅ Responsive design |
+| **Test Duration Graphs** | ✅ Basic timeline | ✅ Detailed graphs & charts |
+
+### Playwright HTML Report
+
+#### Advantages
+
+1. **Zero Configuration**
+   - Built into Playwright
+   - No additional setup required
+   - Works out of the box
+
+2. **Perfect Integration**
+   - Native support for Playwright features
+   - Automatic trace viewer integration
+   - Built-in screenshot viewing
+
+3. **Simplicity**
+   - Easy to understand
+   - Quick to navigate
+   - Minimal learning curve
+
+4. **Trace Viewer**
+   - Interactive trace inspection
+   - Network tab visualization
+   - Console logs included
+
+#### Limitations
+
+1. **Single Run Focus**
+   - No historical trend analysis
+   - Cannot compare runs
+   - No long-term tracking
+
+2. **Limited Customization**
+   - Fixed report format
+   - Limited branding options
+   - No custom sections
+
+3. **Basic Categorization**
+   - Simple project/file grouping
+   - Limited tagging capabilities
+   - No advanced filtering
+
+#### Setup & Usage
+
+**Already configured in `playwright.config.ts`:**
+
+```typescript
+export default defineConfig({
+  reporter: [
+    ['html', { outputFolder: 'playwright-report' }],
+    ['list'], // Console output
+  ],
+});
+```
+
+**Generate and view:**
+
+```bash
+# Run tests (automatically generates report)
+npm test
+
+# View the report
+npm run report
+# or
+npx playwright show-report
+```
+
+**Report Features:**
+
+- **Test results** with pass/fail status
+- **Duration** for each test
+- **Error messages** and stack traces
+- **Attachments** (screenshots, traces, videos)
+- **Retry information** for flaky tests
+- **Filters** by status, project, file
+
+#### Example with Enhanced Logging
+
+```typescript
+test('Playwright HTML report example', async ({ request }, testInfo) => {
+  // This will appear in the report
+  console.log('Starting user creation test');
+
+  const response = await request.post('/users', {
+    data: { name: 'Test User', email: 'test@example.com' }
+  });
+
+  const body = await response.json();
+
+  // Attach response for debugging
+  await testInfo.attach('response', {
+    body: JSON.stringify(body, null, 2),
+    contentType: 'application/json'
+  });
+
+  expect(response.status()).toBe(201);
+});
+```
+
+### Allure Report
+
+#### Advantages
+
+1. **Historical Analysis**
+   - Track test trends over multiple runs
+   - Identify flaky tests automatically
+   - Compare execution history
+
+2. **Rich Visualizations**
+   - Graphs and charts
+   - Test duration trends
+   - Success rate over time
+   - Pie charts for test distribution
+
+3. **Advanced Organization**
+   - Behavior-driven organization (Features, Stories)
+   - Custom categories
+   - Severity levels
+   - Test suites and sub-suites
+
+4. **Detailed Test Steps**
+   - Step-by-step execution view
+   - Nested steps support
+   - Step attachments
+   - Duration per step
+
+5. **Comprehensive Metadata**
+   - Environment details
+   - Test parameters
+   - Links (JIRA, documentation)
+   - Owner information
+   - Tags and labels
+
+6. **Better for Stakeholders**
+   - Executive summaries
+   - Professional appearance
+   - Export capabilities
+   - Timeline visualization
+
+#### Limitations
+
+1. **Setup Complexity**
+   - Requires additional npm package
+   - Needs Java for report generation
+   - More configuration required
+
+2. **Learning Curve**
+   - More features to learn
+   - Requires understanding of Allure concepts
+   - Need to manage result history
+
+3. **Dependencies**
+   - Java runtime required for viewing
+   - Additional tooling needed
+   - More moving parts
+
+#### Setup Instructions
+
+**Step 1: Install Dependencies**
+
+```bash
+npm install -D allure-playwright
+```
+
+**Step 2: Install Allure CLI (choose one method)**
+
+```bash
+# Using npm
+npm install -g allure-commandline --save-dev
+
+# Using brew (macOS)
+brew install allure
+
+# Using scoop (Windows)
+scoop install allure
+```
+
+**Step 3: Update `playwright.config.ts`**
+
+```typescript
+export default defineConfig({
+  reporter: [
+    ['html', { outputFolder: 'playwright-report' }],
+    ['list'],
+    ['allure-playwright', {
+      outputFolder: 'allure-results',
+      detail: true,
+      suiteTitle: false,
+      environmentInfo: {
+        'Test Environment': process.env.TEST_ENV || 'Development',
+        'Base URL': process.env.API_BASE_URL || 'https://jsonplaceholder.typicode.com',
+        'Node Version': process.version,
+        'OS': process.platform
+      }
+    }]
+  ],
+});
+```
+
+**Step 4: Update `package.json` scripts**
+
+Already configured:
+```json
+{
+  "scripts": {
+    "allure:generate": "allure generate ./allure-results --clean -o ./allure-report",
+    "allure:serve": "allure serve ./allure-results"
+  }
+}
+```
+
+**Step 5: Run tests and generate report**
+
+```bash
+# Run tests
+npm test
+
+# Generate and view Allure report
+npm run allure:serve
+
+# Or generate report and open manually
+npm run allure:generate
+# Then open allure-report/index.html
+```
+
+#### Using Allure Features in Tests
+
+**1. Basic Test with Description**
+
+```typescript
+import { test, expect } from '@playwright/test';
+import { allure } from 'allure-playwright';
+
+test('User creation with Allure annotations', async ({ request }) => {
+  await allure.description('This test verifies that a new user can be created via the API');
+  await allure.owner('john.doe@example.com');
+  await allure.tag('smoke');
+  await allure.tag('critical');
+  await allure.severity('critical');
+  await allure.link('https://jira.example.com/PROJ-123', 'JIRA Ticket');
+
+  const response = await request.post('/users', {
+    data: { name: 'John Doe', email: 'john@example.com' }
+  });
+
+  expect(response.status()).toBe(201);
+});
+```
+
+**2. Test with Steps**
+
+```typescript
+test('Complete user workflow with steps', async ({ request }) => {
+  await allure.epic('User Management');
+  await allure.feature('User CRUD Operations');
+  await allure.story('Create and verify user');
+
+  let userId: number;
+
+  await allure.step('Step 1: Create new user', async () => {
+    const newUser = { name: 'Jane Doe', email: 'jane@example.com' };
+
+    await allure.step('Prepare user data', async () => {
+      console.log('User data:', newUser);
+      await allure.attachment('Request Body', JSON.stringify(newUser, null, 2), 'application/json');
+    });
+
+    await allure.step('Send POST request', async () => {
+      const response = await request.post('/users', { data: newUser });
+      const body = await response.json();
+      userId = body.id;
+
+      await allure.attachment('Response Body', JSON.stringify(body, null, 2), 'application/json');
+      expect(response.status()).toBe(201);
+    });
+  });
+
+  await allure.step('Step 2: Verify user was created', async () => {
+    await allure.parameter('User ID', userId);
+
+    const response = await request.get(`/users/${userId}`);
+    expect(response.status()).toBe(200);
+
+    const user = await response.json();
+    await allure.attachment('User Details', JSON.stringify(user, null, 2), 'application/json');
+  });
+
+  await allure.step('Step 3: Update user email', async () => {
+    const response = await request.patch(`/users/${userId}`, {
+      data: { email: 'jane.updated@example.com' }
+    });
+    expect(response.status()).toBe(200);
+  });
+
+  await allure.step('Step 4: Delete user', async () => {
+    const response = await request.delete(`/users/${userId}`);
+    expect(response.status()).toBe(200);
+  });
+});
+```
+
+**3. Test with Parameters**
+
+```typescript
+const testData = [
+  { name: 'John Doe', email: 'john@example.com', expectedStatus: 201 },
+  { name: 'Jane Smith', email: 'jane@example.com', expectedStatus: 201 },
+];
+
+testData.forEach(({ name, email, expectedStatus }) => {
+  test(`Create user: ${name}`, async ({ request }) => {
+    await allure.parameter('Name', name);
+    await allure.parameter('Email', email);
+    await allure.parameter('Expected Status', expectedStatus);
+
+    const response = await request.post('/users', {
+      data: { name, email }
+    });
+
+    expect(response.status()).toBe(expectedStatus);
+  });
+});
+```
+
+**4. Test with Environment Info**
+
+```typescript
+import { test } from '@playwright/test';
+import { allure } from 'allure-playwright';
+
+test.beforeEach(async () => {
+  // Add environment information
+  await allure.parameter('Environment', process.env.TEST_ENV || 'development');
+  await allure.parameter('Base URL', process.env.API_BASE_URL || 'default');
+  await allure.parameter('Execution Time', new Date().toISOString());
+});
+```
+
+**5. Attaching Files and Screenshots**
+
+```typescript
+test('Test with various attachments', async ({ request }) => {
+  const response = await request.get('/users/1');
+  const body = await response.json();
+
+  // Attach JSON
+  await allure.attachment('Response JSON', JSON.stringify(body, null, 2), 'application/json');
+
+  // Attach text
+  await allure.attachment('Request Details', `
+    Method: GET
+    URL: /users/1
+    Status: ${response.status()}
+    Timestamp: ${new Date().toISOString()}
+  `, 'text/plain');
+
+  // Attach CSV (example)
+  const csvData = 'id,name,email\n1,John,john@example.com';
+  await allure.attachment('User Data CSV', csvData, 'text/csv');
+});
+```
+
+### When to Use Which Report?
+
+#### Use Playwright HTML Report When:
+
+1. **Quick Feedback Needed**
+   - Running tests locally during development
+   - Debugging specific test failures
+   - You need immediate visual feedback
+
+2. **Simple Projects**
+   - Small test suites
+   - Limited stakeholder reporting
+   - No historical analysis required
+
+3. **CI/CD Simplicity**
+   - Want minimal dependencies
+   - Don't want to manage Java runtime
+   - Need fast report generation
+
+4. **Trace Analysis Important**
+   - Heavy use of Playwright's trace viewer
+   - Need to debug UI interactions
+   - Want integrated debugging tools
+
+#### Use Allure Report When:
+
+1. **Professional Reporting**
+   - Sharing with non-technical stakeholders
+   - Executive summaries needed
+   - Want polished, professional appearance
+
+2. **Historical Analysis**
+   - Track test stability over time
+   - Identify flaky tests
+   - Monitor test suite trends
+
+3. **Large Test Suites**
+   - Hundreds or thousands of tests
+   - Need advanced filtering
+   - Require detailed categorization
+
+4. **Complex Organization**
+   - Multiple teams/projects
+   - Behavior-driven development (BDD)
+   - Need epic/feature/story hierarchy
+
+5. **Compliance & Documentation**
+   - Need audit trails
+   - Require detailed test documentation
+   - Link tests to requirements/tickets
+
+### Using Both Reports Together (Recommended)
+
+You can (and should) use both reporters simultaneously:
+
+```typescript
+// playwright.config.ts
+export default defineConfig({
+  reporter: [
+    ['html', { outputFolder: 'playwright-report' }],  // For developers
+    ['allure-playwright', { outputFolder: 'allure-results' }],  // For stakeholders
+    ['list'],  // Console output
+    ['json', { outputFile: 'test-results/results.json' }],  // For CI/CD
+    ['junit', { outputFile: 'test-results/junit.xml' }],  // For CI/CD integration
+  ],
+});
+```
+
+**Workflow:**
+
+1. **During Development**: Use Playwright HTML report for quick debugging
+2. **For Stakeholders**: Generate Allure report for presentations
+3. **In CI/CD**: Both reports + JSON/JUnit for integration
+
+### Report Hosting and Sharing
+
+#### Playwright HTML Report
+
+**GitHub Pages:**
+```yaml
+# .github/workflows/tests.yml
+- name: Upload Playwright Report
+  uses: actions/upload-artifact@v3
+  if: always()
+  with:
+    name: playwright-report
+    path: playwright-report/
+    retention-days: 30
+```
+
+#### Allure Report
+
+**Allure Server (Self-hosted):**
+```bash
+# Install Allure Docker
+docker pull frankescobar/allure-docker-service
+
+# Run Allure Server
+docker run -p 5050:5050 \
+  -v $(pwd)/allure-results:/app/allure-results \
+  frankescobar/allure-docker-service
+```
+
+**GitHub Pages with History:**
+```yaml
+- name: Deploy Allure Report to GitHub Pages
+  uses: peaceiris/actions-gh-pages@v3
+  with:
+    github_token: ${{ secrets.GITHUB_TOKEN }}
+    publish_dir: ./allure-report
+    keep_files: true
+```
+
+### Best Practices for Test Reporting
+
+1. **Always Record**:
+   - Request/response bodies
+   - Response times
+   - Error details
+   - Test environment info
+
+2. **Use Meaningful Names**:
+   - Descriptive test names
+   - Clear step descriptions
+   - Meaningful attachment names
+
+3. **Categorize Tests**:
+   - Use tags (smoke, regression, critical)
+   - Group by feature/module
+   - Add severity levels
+
+4. **Include Context**:
+   - Environment variables
+   - Test data used
+   - API endpoints tested
+
+5. **Attach Evidence**:
+   - Request/response payloads
+   - Error screenshots (if applicable)
+   - Performance metrics
+
+6. **Track Performance**:
+   - Record response times
+   - Monitor trends
+   - Set performance thresholds
 
 ---
 
