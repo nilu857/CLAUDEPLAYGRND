@@ -1180,6 +1180,870 @@ test('Load all users', async ({ request }) => {
 });
 ```
 
+#### Test Data Design Patterns
+
+Designing effective test data is crucial for comprehensive API testing. Here are common patterns and strategies:
+
+##### 1. Invalid Data Testing
+
+Test data should cover all invalid scenarios for each field type. Create comprehensive invalid data files:
+
+**Create `data/invalidUserData.json`:**
+
+```json
+{
+  "emptyName": {
+    "name": "",
+    "email": "valid@example.com",
+    "username": "validuser",
+    "expectedError": "Name is required"
+  },
+  "nullName": {
+    "name": null,
+    "email": "valid@example.com",
+    "username": "validuser",
+    "expectedError": "Name must be a string"
+  },
+  "tooShortName": {
+    "name": "Jo",
+    "email": "valid@example.com",
+    "username": "validuser",
+    "expectedError": "Name must be at least 3 characters"
+  },
+  "tooLongName": {
+    "name": "A".repeat(256),
+    "email": "valid@example.com",
+    "username": "validuser",
+    "expectedError": "Name must be less than 255 characters"
+  },
+  "invalidEmailFormat": {
+    "name": "John Doe",
+    "email": "not-an-email",
+    "username": "validuser",
+    "expectedError": "Invalid email format"
+  },
+  "emptyEmail": {
+    "name": "John Doe",
+    "email": "",
+    "username": "validuser",
+    "expectedError": "Email is required"
+  },
+  "emailMissingAt": {
+    "name": "John Doe",
+    "email": "emailexample.com",
+    "username": "validuser",
+    "expectedError": "Invalid email format"
+  },
+  "emailMissingDomain": {
+    "name": "John Doe",
+    "email": "email@",
+    "username": "validuser",
+    "expectedError": "Invalid email format"
+  },
+  "specialCharsInName": {
+    "name": "John<script>alert('xss')</script>",
+    "email": "valid@example.com",
+    "username": "validuser",
+    "expectedError": "Name contains invalid characters"
+  },
+  "sqlInjectionInName": {
+    "name": "John'; DROP TABLE users; --",
+    "email": "valid@example.com",
+    "username": "validuser",
+    "expectedError": "Name contains invalid characters"
+  },
+  "duplicateEmail": {
+    "name": "John Doe",
+    "email": "existing@example.com",
+    "username": "newuser",
+    "expectedError": "Email already exists"
+  },
+  "invalidUsernameChars": {
+    "name": "John Doe",
+    "email": "valid@example.com",
+    "username": "user@123!",
+    "expectedError": "Username can only contain alphanumeric and underscore"
+  },
+  "tooShortUsername": {
+    "name": "John Doe",
+    "email": "valid@example.com",
+    "username": "ab",
+    "expectedError": "Username must be at least 3 characters"
+  },
+  "numericFieldAsString": {
+    "name": "John Doe",
+    "email": "valid@example.com",
+    "age": "not-a-number",
+    "expectedError": "Age must be a number"
+  },
+  "negativeAge": {
+    "name": "John Doe",
+    "email": "valid@example.com",
+    "age": -5,
+    "expectedError": "Age must be positive"
+  },
+  "ageOutOfRange": {
+    "name": "John Doe",
+    "email": "valid@example.com",
+    "age": 200,
+    "expectedError": "Age must be between 0 and 150"
+  },
+  "invalidPhoneFormat": {
+    "name": "John Doe",
+    "email": "valid@example.com",
+    "phone": "abc-def-ghij",
+    "expectedError": "Invalid phone number format"
+  },
+  "phoneWithInvalidChars": {
+    "name": "John Doe",
+    "email": "valid@example.com",
+    "phone": "123-456-7890!@#",
+    "expectedError": "Phone number contains invalid characters"
+  },
+  "missingRequiredField": {
+    "name": "John Doe",
+    "expectedError": "Email is required"
+  },
+  "extraUnknownFields": {
+    "name": "John Doe",
+    "email": "valid@example.com",
+    "username": "validuser",
+    "unknownField1": "value1",
+    "unknownField2": "value2",
+    "expectedError": "Unknown fields not allowed"
+  },
+  "wrongDataType": {
+    "name": 12345,
+    "email": "valid@example.com",
+    "username": "validuser",
+    "expectedError": "Name must be a string"
+  },
+  "arrayInsteadOfString": {
+    "name": ["John", "Doe"],
+    "email": "valid@example.com",
+    "username": "validuser",
+    "expectedError": "Name must be a string"
+  },
+  "objectInsteadOfString": {
+    "name": { "first": "John", "last": "Doe" },
+    "email": "valid@example.com",
+    "username": "validuser",
+    "expectedError": "Name must be a string"
+  },
+  "unicodeCharacters": {
+    "name": "约翰·多伊",
+    "email": "valid@example.com",
+    "username": "validuser",
+    "expectedError": null
+  },
+  "emojiInName": {
+    "name": "John 😊 Doe",
+    "email": "valid@example.com",
+    "username": "validuser",
+    "expectedError": "Name contains invalid characters"
+  }
+}
+```
+
+**Using Invalid Data in Tests:**
+
+```typescript
+test.describe('Invalid User Data Tests', () => {
+  const dataManager = TestDataManager.getInstance();
+  const invalidDataSets = dataManager.loadData('invalidUserData.json');
+
+  // Test each invalid data scenario
+  Object.entries(invalidDataSets).forEach(([scenario, testData]: [string, any]) => {
+    test(`should reject ${scenario}`, async ({ request }) => {
+      const { expectedError, ...userData } = testData;
+
+      const builder = new RequestBuilder();
+      const options = builder.setBody(userData).build();
+
+      const response = await request.post('/users', {
+        ...options,
+        failOnStatusCode: false
+      });
+
+      // Should return error status
+      expect(response.status()).toBeGreaterThanOrEqual(400);
+      expect(response.status()).toBeLessThan(500);
+
+      // Verify error message if expected
+      if (expectedError) {
+        const errorBody = await response.json();
+        expect(JSON.stringify(errorBody).toLowerCase())
+          .toContain(expectedError.toLowerCase().split(' ')[0]); // Check for key word
+      }
+
+      console.log(`✓ Correctly rejected ${scenario}`);
+    });
+  });
+});
+```
+
+##### 2. Pagination Test Data
+
+Design test data specifically for pagination scenarios:
+
+**Create `data/paginationTestData.json`:**
+
+```json
+{
+  "scenarios": {
+    "firstPage": {
+      "page": 1,
+      "limit": 10,
+      "expectedMinItems": 10,
+      "expectedMaxItems": 10,
+      "description": "First page should have exactly 10 items"
+    },
+    "middlePage": {
+      "page": 5,
+      "limit": 10,
+      "expectedMinItems": 1,
+      "expectedMaxItems": 10,
+      "description": "Middle page should have items"
+    },
+    "lastPage": {
+      "page": 10,
+      "limit": 10,
+      "expectedMinItems": 1,
+      "expectedMaxItems": 10,
+      "description": "Last page might have fewer items"
+    },
+    "beyondLastPage": {
+      "page": 999,
+      "limit": 10,
+      "expectedMinItems": 0,
+      "expectedMaxItems": 0,
+      "description": "Beyond last page should return empty array"
+    },
+    "largePage": {
+      "page": 1,
+      "limit": 100,
+      "expectedMinItems": 1,
+      "expectedMaxItems": 100,
+      "description": "Large page size"
+    },
+    "singleItem": {
+      "page": 1,
+      "limit": 1,
+      "expectedMinItems": 1,
+      "expectedMaxItems": 1,
+      "description": "Single item per page"
+    },
+    "zeroPage": {
+      "page": 0,
+      "limit": 10,
+      "expectedStatus": 400,
+      "description": "Page 0 should be invalid"
+    },
+    "negativePage": {
+      "page": -1,
+      "limit": 10,
+      "expectedStatus": 400,
+      "description": "Negative page should be invalid"
+    },
+    "zeroLimit": {
+      "page": 1,
+      "limit": 0,
+      "expectedStatus": 400,
+      "description": "Zero limit should be invalid"
+    },
+    "negativeLimit": {
+      "page": 1,
+      "limit": -10,
+      "expectedStatus": 400,
+      "description": "Negative limit should be invalid"
+    },
+    "excessiveLimit": {
+      "page": 1,
+      "limit": 10000,
+      "expectedStatus": 400,
+      "description": "Excessive limit should be rejected"
+    },
+    "stringInsteadOfNumber": {
+      "page": "abc",
+      "limit": "xyz",
+      "expectedStatus": 400,
+      "description": "String values should be rejected"
+    }
+  },
+  "expectedMetadata": {
+    "totalItems": 100,
+    "totalPages": 10,
+    "itemsPerPage": 10
+  }
+}
+```
+
+**Using Pagination Test Data:**
+
+```typescript
+test.describe('Pagination Tests', () => {
+  const dataManager = TestDataManager.getInstance();
+  const paginationData = dataManager.loadData('paginationTestData.json');
+
+  Object.entries(paginationData.scenarios).forEach(([scenario, config]: [string, any]) => {
+    test(`Pagination: ${config.description}`, async ({ request }) => {
+      const builder = new RequestBuilder();
+      const options = builder
+        .addQueryParam('_page', config.page)
+        .addQueryParam('_limit', config.limit)
+        .build();
+
+      const response = await request.get('/posts', {
+        ...options,
+        failOnStatusCode: false
+      });
+
+      // Check expected status
+      if (config.expectedStatus) {
+        await ApiAssertions.assertStatusCode(response, config.expectedStatus);
+        return; // Error case, don't check data
+      }
+
+      // Success case - verify data
+      await ApiAssertions.assertStatusCode(response, 200);
+      const data = await response.json();
+
+      expect(Array.isArray(data)).toBeTruthy();
+      expect(data.length).toBeGreaterThanOrEqual(config.expectedMinItems);
+      expect(data.length).toBeLessThanOrEqual(config.expectedMaxItems);
+
+      console.log(`✓ ${scenario}: Returned ${data.length} items`);
+    });
+  });
+
+  test('Pagination: Verify data uniqueness across pages', async ({ request }) => {
+    const pageSize = 10;
+    const idsFromPages: Set<number> = new Set();
+
+    // Fetch first 3 pages
+    for (let page = 1; page <= 3; page++) {
+      const builder = new RequestBuilder();
+      const options = builder
+        .addQueryParam('_page', page)
+        .addQueryParam('_limit', pageSize)
+        .build();
+
+      const response = await request.get('/posts', options);
+      const data = await response.json();
+
+      // Verify no duplicate IDs across pages
+      data.forEach((item: any) => {
+        expect(idsFromPages.has(item.id)).toBeFalsy();
+        idsFromPages.add(item.id);
+      });
+    }
+
+    console.log(`✓ Verified ${idsFromPages.size} unique items across 3 pages`);
+  });
+
+  test('Pagination: Verify total count remains consistent', async ({ request }) => {
+    const pageSize = 10;
+    let totalFetched = 0;
+    let page = 1;
+    let hasMore = true;
+
+    while (hasMore && page <= 20) { // Safety limit
+      const builder = new RequestBuilder();
+      const options = builder
+        .addQueryParam('_page', page)
+        .addQueryParam('_limit', pageSize)
+        .build();
+
+      const response = await request.get('/posts', options);
+      const data = await response.json();
+
+      totalFetched += data.length;
+      hasMore = data.length === pageSize;
+      page++;
+    }
+
+    console.log(`✓ Total items fetched: ${totalFetched} across ${page - 1} pages`);
+    expect(totalFetched).toBeGreaterThan(0);
+  });
+});
+```
+
+##### 3. Boundary Value Test Data
+
+Test edge cases and boundaries:
+
+**Create `data/boundaryTestData.json`:**
+
+```json
+{
+  "stringLengthBoundaries": {
+    "exactlyMinLength": {
+      "value": "abc",
+      "field": "username",
+      "minLength": 3,
+      "shouldPass": true
+    },
+    "oneLessThanMin": {
+      "value": "ab",
+      "field": "username",
+      "minLength": 3,
+      "shouldPass": false
+    },
+    "exactlyMaxLength": {
+      "value": "a".repeat(255),
+      "field": "name",
+      "maxLength": 255,
+      "shouldPass": true
+    },
+    "oneMoreThanMax": {
+      "value": "a".repeat(256),
+      "field": "name",
+      "maxLength": 255,
+      "shouldPass": false
+    }
+  },
+  "numericBoundaries": {
+    "minValue": {
+      "value": 0,
+      "field": "age",
+      "min": 0,
+      "max": 150,
+      "shouldPass": true
+    },
+    "maxValue": {
+      "value": 150,
+      "field": "age",
+      "min": 0,
+      "max": 150,
+      "shouldPass": true
+    },
+    "belowMin": {
+      "value": -1,
+      "field": "age",
+      "min": 0,
+      "max": 150,
+      "shouldPass": false
+    },
+    "aboveMax": {
+      "value": 151,
+      "field": "age",
+      "min": 0,
+      "max": 150,
+      "shouldPass": false
+    },
+    "veryLargeNumber": {
+      "value": 999999999999,
+      "field": "id",
+      "shouldPass": false
+    },
+    "floatInsteadOfInt": {
+      "value": 25.5,
+      "field": "age",
+      "shouldPass": false
+    }
+  },
+  "arrayBoundaries": {
+    "emptyArray": {
+      "value": [],
+      "field": "tags",
+      "minItems": 1,
+      "shouldPass": false
+    },
+    "exactlyMinItems": {
+      "value": ["tag1"],
+      "field": "tags",
+      "minItems": 1,
+      "shouldPass": true
+    },
+    "exactlyMaxItems": {
+      "value": ["tag1", "tag2", "tag3", "tag4", "tag5"],
+      "field": "tags",
+      "maxItems": 5,
+      "shouldPass": true
+    },
+    "oneMoreThanMaxItems": {
+      "value": ["tag1", "tag2", "tag3", "tag4", "tag5", "tag6"],
+      "field": "tags",
+      "maxItems": 5,
+      "shouldPass": false
+    }
+  },
+  "dateBoundaries": {
+    "todayDate": {
+      "value": "2024-01-15",
+      "field": "birthDate",
+      "shouldPass": true
+    },
+    "futureDate": {
+      "value": "2099-12-31",
+      "field": "birthDate",
+      "shouldPass": false
+    },
+    "veryOldDate": {
+      "value": "1900-01-01",
+      "field": "birthDate",
+      "shouldPass": true
+    },
+    "invalidDateFormat": {
+      "value": "15-01-2024",
+      "field": "birthDate",
+      "shouldPass": false
+    },
+    "invalidDate": {
+      "value": "2024-02-30",
+      "field": "birthDate",
+      "shouldPass": false
+    }
+  }
+}
+```
+
+##### 4. Sorting and Filtering Test Data
+
+**Create `data/sortingFilteringData.json`:**
+
+```json
+{
+  "sortingScenarios": {
+    "sortByNameAsc": {
+      "sortField": "name",
+      "sortOrder": "asc",
+      "expectedOrder": "ascending"
+    },
+    "sortByNameDesc": {
+      "sortField": "name",
+      "sortOrder": "desc",
+      "expectedOrder": "descending"
+    },
+    "sortByDateAsc": {
+      "sortField": "createdAt",
+      "sortOrder": "asc",
+      "expectedOrder": "ascending"
+    },
+    "sortByMultipleFields": {
+      "sortFields": ["category", "price"],
+      "sortOrders": ["asc", "desc"]
+    },
+    "invalidSortField": {
+      "sortField": "nonExistentField",
+      "expectedStatus": 400
+    }
+  },
+  "filteringScenarios": {
+    "singleFilter": {
+      "filters": {
+        "status": "active"
+      },
+      "expectedField": "status",
+      "expectedValue": "active"
+    },
+    "multipleFilters": {
+      "filters": {
+        "status": "active",
+        "category": "electronics",
+        "price_min": 100,
+        "price_max": 500
+      }
+    },
+    "rangeFilter": {
+      "filters": {
+        "createdAt_gte": "2024-01-01",
+        "createdAt_lte": "2024-12-31"
+      }
+    },
+    "wildcardSearch": {
+      "filters": {
+        "name_contains": "phone"
+      }
+    }
+  },
+  "combinedScenarios": {
+    "filterAndSort": {
+      "filters": {
+        "category": "electronics"
+      },
+      "sort": {
+        "field": "price",
+        "order": "desc"
+      },
+      "pagination": {
+        "page": 1,
+        "limit": 20
+      }
+    }
+  }
+}
+```
+
+**Using Sorting and Filtering Test Data:**
+
+```typescript
+test.describe('Sorting and Filtering Tests', () => {
+  const dataManager = TestDataManager.getInstance();
+  const testData = dataManager.loadData('sortingFilteringData.json');
+
+  Object.entries(testData.sortingScenarios).forEach(([scenario, config]: [string, any]) => {
+    test(`Sorting: ${scenario}`, async ({ request }) => {
+      if (config.expectedStatus) {
+        // Test invalid sort field
+        const builder = new RequestBuilder();
+        const options = builder
+          .addQueryParam('_sort', config.sortField)
+          .build();
+
+        const response = await request.get('/posts', {
+          ...options,
+          failOnStatusCode: false
+        });
+
+        await ApiAssertions.assertStatusCode(response, config.expectedStatus);
+        return;
+      }
+
+      // Test valid sorting
+      const builder = new RequestBuilder();
+      const options = builder
+        .addQueryParam('_sort', config.sortField)
+        .addQueryParam('_order', config.sortOrder)
+        .build();
+
+      const response = await request.get('/posts', options);
+      await ApiAssertions.assertStatusCode(response, 200);
+
+      const data = await response.json();
+
+      // Verify sorting order
+      if (config.expectedOrder === 'ascending') {
+        for (let i = 0; i < data.length - 1; i++) {
+          expect(data[i][config.sortField] <= data[i + 1][config.sortField]).toBeTruthy();
+        }
+      } else {
+        for (let i = 0; i < data.length - 1; i++) {
+          expect(data[i][config.sortField] >= data[i + 1][config.sortField]).toBeTruthy();
+        }
+      }
+
+      console.log(`✓ Verified ${config.expectedOrder} sort on ${config.sortField}`);
+    });
+  });
+
+  Object.entries(testData.filteringScenarios).forEach(([scenario, config]: [string, any]) => {
+    test(`Filtering: ${scenario}`, async ({ request }) => {
+      const builder = new RequestBuilder();
+
+      // Add all filters as query params
+      Object.entries(config.filters).forEach(([key, value]) => {
+        builder.addQueryParam(key, value);
+      });
+
+      const options = builder.build();
+      const response = await request.get('/posts', options);
+
+      await ApiAssertions.assertStatusCode(response, 200);
+      const data = await response.json();
+
+      // Verify filtering if expected field and value provided
+      if (config.expectedField && config.expectedValue) {
+        data.forEach((item: any) => {
+          expect(item[config.expectedField]).toBe(config.expectedValue);
+        });
+      }
+
+      console.log(`✓ Filtering verified for ${scenario}: ${data.length} items`);
+    });
+  });
+});
+```
+
+##### 5. State Transition Test Data
+
+**Create `data/stateTransitionData.json`:**
+
+```json
+{
+  "orderStates": {
+    "validTransitions": [
+      {
+        "from": "pending",
+        "to": "processing",
+        "shouldSucceed": true
+      },
+      {
+        "from": "processing",
+        "to": "shipped",
+        "shouldSucceed": true
+      },
+      {
+        "from": "shipped",
+        "to": "delivered",
+        "shouldSucceed": true
+      },
+      {
+        "from": "pending",
+        "to": "cancelled",
+        "shouldSucceed": true
+      }
+    ],
+    "invalidTransitions": [
+      {
+        "from": "delivered",
+        "to": "pending",
+        "shouldSucceed": false,
+        "expectedError": "Cannot change status from delivered to pending"
+      },
+      {
+        "from": "cancelled",
+        "to": "processing",
+        "shouldSucceed": false,
+        "expectedError": "Cannot process cancelled order"
+      },
+      {
+        "from": "shipped",
+        "to": "pending",
+        "shouldSucceed": false,
+        "expectedError": "Cannot revert shipped order to pending"
+      }
+    ]
+  }
+}
+```
+
+##### 6. Concurrent Request Test Data
+
+**Create `data/concurrencyTestData.json`:**
+
+```json
+{
+  "scenarios": {
+    "simultaneousCreation": {
+      "requestCount": 10,
+      "requestData": {
+        "title": "Concurrent Post",
+        "body": "Testing concurrent creation",
+        "userId": 1
+      },
+      "expectedUniqueIds": 10
+    },
+    "raceCondition": {
+      "resource": "/counter/increment",
+      "requestCount": 100,
+      "expectedFinalValue": 100
+    },
+    "bulkUpdate": {
+      "resources": [1, 2, 3, 4, 5],
+      "updateData": {
+        "status": "updated"
+      },
+      "concurrent": true
+    }
+  }
+}
+```
+
+**Using Concurrency Test Data:**
+
+```typescript
+test.describe('Concurrency Tests', () => {
+  const dataManager = TestDataManager.getInstance();
+  const testData = dataManager.loadData('concurrencyTestData.json');
+
+  test('Concurrent creation should generate unique IDs', async ({ request }) => {
+    const scenario = testData.scenarios.simultaneousCreation;
+
+    // Create multiple concurrent requests
+    const requests = Array(scenario.requestCount).fill(null).map(() =>
+      request.post('/posts', { data: scenario.requestData })
+    );
+
+    const responses = await Promise.all(requests);
+
+    // Collect all IDs
+    const ids = new Set();
+    for (const response of responses) {
+      await ApiAssertions.assertStatusCode(response, 201);
+      const data = await response.json();
+      ids.add(data.id);
+    }
+
+    // Verify all IDs are unique
+    expect(ids.size).toBe(scenario.expectedUniqueIds);
+    console.log(`✓ Created ${ids.size} unique resources concurrently`);
+  });
+});
+```
+
+##### 7. Test Data Organization Best Practices
+
+**Folder Structure:**
+
+```
+data/
+├── valid/
+│   ├── users.json
+│   ├── posts.json
+│   └── products.json
+├── invalid/
+│   ├── userValidation.json
+│   ├── postValidation.json
+│   └── fieldErrors.json
+├── scenarios/
+│   ├── pagination.json
+│   ├── sorting.json
+│   ├── filtering.json
+│   └── stateTransitions.json
+├── boundaries/
+│   ├── stringBoundaries.json
+│   ├── numericBoundaries.json
+│   └── dateBoundaries.json
+└── performance/
+    ├── concurrency.json
+    └── loadTesting.json
+```
+
+**Complete Test Data Template:**
+
+```typescript
+// data/testDataTemplate.ts
+export interface TestDataTemplate {
+  valid: any;
+  invalid: {
+    scenario: string;
+    data: any;
+    expectedError: string;
+    expectedStatus: number;
+  }[];
+  boundary: {
+    scenario: string;
+    data: any;
+    shouldPass: boolean;
+  }[];
+}
+
+// Example usage
+export const userTestData: TestDataTemplate = {
+  valid: {
+    name: "John Doe",
+    email: "john@example.com",
+    age: 30
+  },
+  invalid: [
+    {
+      scenario: "Empty name",
+      data: { name: "", email: "john@example.com" },
+      expectedError: "Name is required",
+      expectedStatus: 400
+    }
+  ],
+  boundary: [
+    {
+      scenario: "Minimum age",
+      data: { name: "John", email: "john@example.com", age: 0 },
+      shouldPass: true
+    }
+  ]
+};
+```
+
 ### 6. Data Generation
 
 Generate random test data for unique tests.
