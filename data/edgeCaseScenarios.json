@@ -1,0 +1,110 @@
+[
+  {
+    "scenario": "Zero page size",
+    "params": {
+      "limit": 0,
+      "skip": 0
+    },
+    "expectedStatus": 400,
+    "description": "Should return 400 error for invalid page size"
+  },
+  {
+    "scenario": "Negative limit",
+    "params": {
+      "limit": -10,
+      "skip": 0
+    },
+    "expectedStatus": 400,
+    "description": "Should return 400 error for negative limit"
+  },
+  {
+    "scenario": "Negative skip value",
+    "params": {
+      "limit": 10,
+      "skip": -5
+    },
+    "expectedStatus": 400,
+    "description": "Should return 400 error for negative skip"
+  },
+  {
+    "scenario": "Skip beyond available data",
+    "params": {
+      "limit": 10,
+      "skip": 999999
+    },
+    "expectedStatus": 200,
+    "expectedItems": 0,
+    "description": "Should return empty array when skip exceeds total items"
+  },
+  {
+    "scenario": "Extremely large limit",
+    "params": {
+      "limit": 10000,
+      "skip": 0
+    },
+    "expectedStatus": 400,
+    "description": "Should return 400 error for limit exceeding maximum"
+  },
+  {
+    "scenario": "Invalid sort field",
+    "params": {
+      "sortBy": "invalidFieldName123",
+      "order": "asc",
+      "limit": 10
+    },
+    "expectedStatus": 400,
+    "description": "Should return 400 error for invalid sort field"
+  },
+  {
+    "scenario": "Invalid sort order",
+    "params": {
+      "sortBy": "firstName",
+      "order": "invalid",
+      "limit": 10
+    },
+    "expectedStatus": 400,
+    "description": "Should return 400 error for invalid sort order"
+  },
+  {
+    "scenario": "Missing required parameters",
+    "params": {},
+    "expectedStatus": 200,
+    "description": "Should use default pagination when parameters are missing"
+  },
+  {
+    "scenario": "Limit at maximum allowed (100)",
+    "params": {
+      "limit": 100,
+      "skip": 0
+    },
+    "expectedStatus": 200,
+    "description": "Should accept maximum allowed limit"
+  },
+  {
+    "scenario": "Limit just above maximum (101)",
+    "params": {
+      "limit": 101,
+      "skip": 0
+    },
+    "expectedStatus": 400,
+    "description": "Should reject limit above maximum"
+  },
+  {
+    "scenario": "String value for numeric parameter",
+    "params": {
+      "limit": "abc",
+      "skip": "xyz"
+    },
+    "expectedStatus": 400,
+    "description": "Should return 400 error for non-numeric pagination parameters"
+  },
+  {
+    "scenario": "Decimal values for pagination",
+    "params": {
+      "limit": 10.5,
+      "skip": 5.7
+    },
+    "expectedStatus": 400,
+    "description": "Should return 400 error for decimal pagination parameters"
+  }
+]
