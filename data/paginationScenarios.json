@@ -1,0 +1,91 @@
+[
+  {
+    "scenario": "Default pagination - First page with limit 10",
+    "params": {
+      "limit": 10,
+      "skip": 0
+    },
+    "expected": {
+      "minItems": 1,
+      "maxItems": 10,
+      "hasMore": true
+    }
+  },
+  {
+    "scenario": "Medium page size - 25 items",
+    "params": {
+      "limit": 25,
+      "skip": 0
+    },
+    "expected": {
+      "minItems": 1,
+      "maxItems": 25
+    }
+  },
+  {
+    "scenario": "Large page size - 50 items",
+    "params": {
+      "limit": 50,
+      "skip": 0
+    },
+    "expected": {
+      "minItems": 1,
+      "maxItems": 50
+    }
+  },
+  {
+    "scenario": "Maximum page size - 100 items",
+    "params": {
+      "limit": 100,
+      "skip": 0
+    },
+    "expected": {
+      "minItems": 1,
+      "maxItems": 100
+    }
+  },
+  {
+    "scenario": "Second page - skip 10 items",
+    "params": {
+      "limit": 10,
+      "skip": 10
+    },
+    "expected": {
+      "minItems": 1,
+      "maxItems": 10
+    }
+  },
+  {
+    "scenario": "Third page - skip 20 items",
+    "params": {
+      "limit": 10,
+      "skip": 20
+    },
+    "expected": {
+      "minItems": 1,
+      "maxItems": 10
+    }
+  },
+  {
+    "scenario": "Middle page - skip 50 items",
+    "params": {
+      "limit": 25,
+      "skip": 50
+    },
+    "expected": {
+      "minItems": 1,
+      "maxItems": 25
+    }
+  },
+  {
+    "scenario": "Small page size - 5 items",
+    "params": {
+      "limit": 5,
+      "skip": 0
+    },
+    "expected": {
+      "minItems": 1,
+      "maxItems": 5
+    }
+  }
+]

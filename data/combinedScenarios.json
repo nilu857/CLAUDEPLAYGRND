@@ -1,0 +1,90 @@
+[
+  {
+    "scenario": "First page with name ascending sort",
+    "params": {
+      "limit": 10,
+      "skip": 0,
+      "sortBy": "firstName",
+      "order": "asc"
+    },
+    "field": "firstName",
+    "dataType": "string"
+  },
+  {
+    "scenario": "Second page with name descending sort",
+    "params": {
+      "limit": 10,
+      "skip": 10,
+      "sortBy": "firstName",
+      "order": "desc"
+    },
+    "field": "firstName",
+    "dataType": "string"
+  },
+  {
+    "scenario": "Large page with email ascending sort",
+    "params": {
+      "limit": 50,
+      "skip": 0,
+      "sortBy": "email",
+      "order": "asc"
+    },
+    "field": "email",
+    "dataType": "string"
+  },
+  {
+    "scenario": "Medium page with age descending sort",
+    "params": {
+      "limit": 25,
+      "skip": 25,
+      "sortBy": "age",
+      "order": "desc"
+    },
+    "field": "age",
+    "dataType": "number"
+  },
+  {
+    "scenario": "Small page with lastName ascending sort",
+    "params": {
+      "limit": 5,
+      "skip": 15,
+      "sortBy": "lastName",
+      "order": "asc"
+    },
+    "field": "lastName",
+    "dataType": "string"
+  },
+  {
+    "scenario": "Third page with birthDate descending sort",
+    "params": {
+      "limit": 20,
+      "skip": 40,
+      "sortBy": "birthDate",
+      "order": "desc"
+    },
+    "field": "birthDate",
+    "dataType": "date"
+  },
+  {
+    "scenario": "Maximum page size with email descending sort",
+    "params": {
+      "limit": 100,
+      "skip": 0,
+      "sortBy": "email",
+      "order": "desc"
+    },
+    "field": "email",
+    "dataType": "string"
+  },
+  {
+    "scenario": "Middle page with age ascending sort",
+    "params": {
+      "limit": 30,
+      "skip": 60,
+      "sortBy": "age",
+      "order": "asc"
+    },
+    "field": "age",
+    "dataType": "number"
+  }
+]

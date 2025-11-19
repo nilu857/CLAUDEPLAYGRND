@@ -1,0 +1,92 @@
+[
+  {
+    "scenario": "Sort by firstName ascending",
+    "params": {
+      "sortBy": "firstName",
+      "order": "asc"
+    },
+    "field": "firstName",
+    "dataType": "string"
+  },
+  {
+    "scenario": "Sort by firstName descending",
+    "params": {
+      "sortBy": "firstName",
+      "order": "desc"
+    },
+    "field": "firstName",
+    "dataType": "string"
+  },
+  {
+    "scenario": "Sort by lastName ascending",
+    "params": {
+      "sortBy": "lastName",
+      "order": "asc"
+    },
+    "field": "lastName",
+    "dataType": "string"
+  },
+  {
+    "scenario": "Sort by lastName descending",
+    "params": {
+      "sortBy": "lastName",
+      "order": "desc"
+    },
+    "field": "lastName",
+    "dataType": "string"
+  },
+  {
+    "scenario": "Sort by email ascending",
+    "params": {
+      "sortBy": "email",
+      "order": "asc"
+    },
+    "field": "email",
+    "dataType": "string"
+  },
+  {
+    "scenario": "Sort by email descending",
+    "params": {
+      "sortBy": "email",
+      "order": "desc"
+    },
+    "field": "email",
+    "dataType": "string"
+  },
+  {
+    "scenario": "Sort by age ascending",
+    "params": {
+      "sortBy": "age",
+      "order": "asc"
+    },
+    "field": "age",
+    "dataType": "number"
+  },
+  {
+    "scenario": "Sort by age descending",
+    "params": {
+      "sortBy": "age",
+      "order": "desc"
+    },
+    "field": "age",
+    "dataType": "number"
+  },
+  {
+    "scenario": "Sort by birthDate ascending",
+    "params": {
+      "sortBy": "birthDate",
+      "order": "asc"
+    },
+    "field": "birthDate",
+    "dataType": "date"
+  },
+  {
+    "scenario": "Sort by birthDate descending",
+    "params": {
+      "sortBy": "birthDate",
+      "order": "desc"
+    },
+    "field": "birthDate",
+    "dataType": "date"
+  }
+]
