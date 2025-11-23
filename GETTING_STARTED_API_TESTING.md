@@ -12,6 +12,8 @@
 8. [Writing Your First API Test](#writing-your-first-api-test)
 9. [Framework Components Deep Dive](#framework-components-deep-dive)
 10. [Advanced Topics](#advanced-topics)
+    - [Database Integration Testing](#9-database-integration-testing)
+    - [Using API Tests to Complement UI Tests](#using-api-tests-to-complement-ui-tests)
 11. [Best Practices](#best-practices)
 12. [Common Patterns and Examples](#common-patterns-and-examples)
 13. [Troubleshooting](#troubleshooting)
@@ -30,6 +32,9 @@ By the end of this guide, you'll be able to:
 - Validate API responses effectively
 - Handle authentication and complex scenarios
 - Build a maintainable test automation framework
+- Integrate database testing with API tests
+- Use APIs to complement and optimize UI tests
+- Verify backend state while testing UI flows
 
 ---
 
@@ -1736,6 +1741,1153 @@ test('Request with retry', async ({ request }) => {
 });
 ```
 
+### 9. Database Integration Testing
+
+Often you need to validate that API operations correctly update the database, or set up specific database states for testing.
+
+#### Installing Database Drivers
+
+```bash
+# For PostgreSQL
+npm install -D pg
+
+# For MySQL
+npm install -D mysql2
+
+# For MongoDB
+npm install -D mongodb
+
+# For SQLite
+npm install -D sqlite3
+```
+
+#### Creating Database Helper
+
+Create `utils/DatabaseHelper.ts`:
+
+```typescript
+import { Client } from 'pg'; // or your preferred database driver
+
+export class DatabaseHelper {
+  private client: Client;
+  private connected: boolean = false;
+
+  constructor(config?: {
+    host?: string;
+    port?: number;
+    database?: string;
+    user?: string;
+    password?: string;
+  }) {
+    this.client = new Client({
+      host: config?.host || process.env.DB_HOST || 'localhost',
+      port: config?.port || parseInt(process.env.DB_PORT || '5432'),
+      database: config?.database || process.env.DB_NAME || 'testdb',
+      user: config?.user || process.env.DB_USER || 'postgres',
+      password: config?.password || process.env.DB_PASSWORD || 'password'
+    });
+  }
+
+  async connect(): Promise<void> {
+    if (!this.connected) {
+      await this.client.connect();
+      this.connected = true;
+      console.log('✓ Database connected');
+    }
+  }
+
+  async disconnect(): Promise<void> {
+    if (this.connected) {
+      await this.client.end();
+      this.connected = false;
+      console.log('✓ Database disconnected');
+    }
+  }
+
+  async query(sql: string, params?: any[]): Promise<any> {
+    try {
+      const result = await this.client.query(sql, params);
+      return result.rows;
+    } catch (error) {
+      console.error('Database query error:', error);
+      throw error;
+    }
+  }
+
+  async executeQuery(sql: string, params?: any[]): Promise<number> {
+    try {
+      const result = await this.client.query(sql, params);
+      return result.rowCount || 0;
+    } catch (error) {
+      console.error('Database execute error:', error);
+      throw error;
+    }
+  }
+
+  async getUserById(userId: number): Promise<any> {
+    const result = await this.query('SELECT * FROM users WHERE id = $1', [userId]);
+    return result[0];
+  }
+
+  async insertUser(user: { name: string; email: string; [key: string]: any }): Promise<number> {
+    const result = await this.query(
+      'INSERT INTO users (name, email) VALUES ($1, $2) RETURNING id',
+      [user.name, user.email]
+    );
+    return result[0].id;
+  }
+
+  async updateUser(userId: number, updates: { [key: string]: any }): Promise<void> {
+    const fields = Object.keys(updates);
+    const values = Object.values(updates);
+
+    const setClause = fields.map((field, index) => `${field} = $${index + 1}`).join(', ');
+    const sql = `UPDATE users SET ${setClause} WHERE id = $${fields.length + 1}`;
+
+    await this.executeQuery(sql, [...values, userId]);
+  }
+
+  async deleteUser(userId: number): Promise<void> {
+    await this.executeQuery('DELETE FROM users WHERE id = $1', [userId]);
+  }
+
+  async clearTable(tableName: string): Promise<void> {
+    await this.executeQuery(`DELETE FROM ${tableName}`);
+    console.log(`✓ Table ${tableName} cleared`);
+  }
+
+  async countRecords(tableName: string, whereClause?: string): Promise<number> {
+    const sql = whereClause
+      ? `SELECT COUNT(*) as count FROM ${tableName} WHERE ${whereClause}`
+      : `SELECT COUNT(*) as count FROM ${tableName}`;
+
+    const result = await this.query(sql);
+    return parseInt(result[0].count);
+  }
+
+  async verifyRecordExists(tableName: string, conditions: { [key: string]: any }): Promise<boolean> {
+    const fields = Object.keys(conditions);
+    const values = Object.values(conditions);
+
+    const whereClause = fields.map((field, index) => `${field} = $${index + 1}`).join(' AND ');
+    const sql = `SELECT COUNT(*) as count FROM ${tableName} WHERE ${whereClause}`;
+
+    const result = await this.query(sql, values);
+    return parseInt(result[0].count) > 0;
+  }
+
+  async setupTestData(data: { table: string; records: any[] }[]): Promise<void> {
+    for (const { table, records } of data) {
+      for (const record of records) {
+        const fields = Object.keys(record);
+        const values = Object.values(record);
+        const placeholders = fields.map((_, i) => `$${i + 1}`).join(', ');
+
+        const sql = `INSERT INTO ${table} (${fields.join(', ')}) VALUES (${placeholders})`;
+        await this.executeQuery(sql, values);
+      }
+    }
+    console.log('✓ Test data setup complete');
+  }
+}
+```
+
+#### Using Database Helper with API Tests
+
+**Example 1: Verify API Creates Database Record**
+
+```typescript
+import { test, expect } from '@playwright/test';
+import { DatabaseHelper } from '../../utils/DatabaseHelper';
+import { ApiAssertions } from '../../helpers/ApiAssertions';
+
+test.describe('User API with Database Verification', () => {
+  let dbHelper: DatabaseHelper;
+
+  test.beforeAll(async () => {
+    dbHelper = new DatabaseHelper();
+    await dbHelper.connect();
+  });
+
+  test.afterAll(async () => {
+    await dbHelper.disconnect();
+  });
+
+  test('should create user in database via API', async ({ request }) => {
+    const newUser = {
+      name: 'John Doe',
+      email: 'john.doe@example.com'
+    };
+
+    // Step 1: Create user via API
+    const apiResponse = await request.post('/users', {
+      data: newUser
+    });
+
+    await ApiAssertions.assertStatusCode(apiResponse, 201);
+    const responseBody = await apiResponse.json();
+    const userId = responseBody.id;
+
+    // Step 2: Verify user exists in database
+    const dbUser = await dbHelper.getUserById(userId);
+
+    expect(dbUser).toBeTruthy();
+    expect(dbUser.name).toBe(newUser.name);
+    expect(dbUser.email).toBe(newUser.email);
+    expect(dbUser.created_at).toBeTruthy();
+
+    // Cleanup
+    await dbHelper.deleteUser(userId);
+  });
+});
+```
+
+**Example 2: Setup Database State for API Tests**
+
+```typescript
+test('should update user via API and verify in database', async ({ request }) => {
+  // Step 1: Setup - Insert user directly in database
+  const userId = await dbHelper.insertUser({
+    name: 'Jane Smith',
+    email: 'jane@example.com'
+  });
+
+  // Step 2: Update user via API
+  const updateData = {
+    name: 'Jane Updated',
+    email: 'jane.updated@example.com'
+  };
+
+  const apiResponse = await request.patch(`/users/${userId}`, {
+    data: updateData
+  });
+
+  await ApiAssertions.assertStatusCode(apiResponse, 200);
+
+  // Step 3: Verify changes in database
+  const dbUser = await dbHelper.getUserById(userId);
+
+  expect(dbUser.name).toBe(updateData.name);
+  expect(dbUser.email).toBe(updateData.email);
+  expect(dbUser.updated_at).toBeTruthy();
+
+  // Cleanup
+  await dbHelper.deleteUser(userId);
+});
+```
+
+**Example 3: Test Data Cleanup Using Database**
+
+```typescript
+test.describe('Posts API Tests', () => {
+  test.beforeEach(async () => {
+    // Clean database before each test
+    await dbHelper.clearTable('posts');
+    await dbHelper.clearTable('comments');
+  });
+
+  test.afterEach(async () => {
+    // Clean database after each test
+    await dbHelper.clearTable('posts');
+    await dbHelper.clearTable('comments');
+  });
+
+  test('should create post and verify database state', async ({ request }) => {
+    const newPost = {
+      title: 'Test Post',
+      body: 'Post content',
+      userId: 1
+    };
+
+    const response = await request.post('/posts', { data: newPost });
+    const post = await response.json();
+
+    // Verify in database
+    const postCount = await dbHelper.countRecords('posts', `id = ${post.id}`);
+    expect(postCount).toBe(1);
+
+    const exists = await dbHelper.verifyRecordExists('posts', {
+      id: post.id,
+      title: newPost.title
+    });
+    expect(exists).toBeTruthy();
+  });
+});
+```
+
+**Example 4: Complex Database Verification**
+
+```typescript
+test('should handle user with multiple posts', async ({ request }) => {
+  // Setup: Create user in database
+  const userId = await dbHelper.insertUser({
+    name: 'Test User',
+    email: 'test@example.com'
+  });
+
+  // Create multiple posts via API
+  const posts = [
+    { title: 'Post 1', body: 'Content 1', userId },
+    { title: 'Post 2', body: 'Content 2', userId },
+    { title: 'Post 3', body: 'Content 3', userId }
+  ];
+
+  for (const post of posts) {
+    const response = await request.post('/posts', { data: post });
+    await ApiAssertions.assertStatusCode(response, 201);
+  }
+
+  // Verify all posts in database
+  const postCount = await dbHelper.countRecords('posts', `user_id = ${userId}`);
+  expect(postCount).toBe(3);
+
+  // Verify user's posts via API
+  const apiResponse = await request.get(`/users/${userId}/posts`);
+  const userPosts = await apiResponse.json();
+
+  expect(userPosts.length).toBe(3);
+
+  // Cleanup
+  await dbHelper.clearTable('posts');
+  await dbHelper.deleteUser(userId);
+});
+```
+
+**Example 5: Test Database Constraints**
+
+```typescript
+test('should reject duplicate email in database', async ({ request }) => {
+  const user = {
+    name: 'John Doe',
+    email: 'duplicate@example.com'
+  };
+
+  // Create first user via API
+  const response1 = await request.post('/users', { data: user });
+  await ApiAssertions.assertStatusCode(response1, 201);
+  const user1 = await response1.json();
+
+  // Attempt to create duplicate
+  const response2 = await request.post('/users', { data: user });
+  await ApiAssertions.assertStatusCode(response2, 400); // Or 409 Conflict
+
+  // Verify only one record exists in database
+  const count = await dbHelper.countRecords('users', `email = '${user.email}'`);
+  expect(count).toBe(1);
+
+  // Cleanup
+  await dbHelper.deleteUser(user1.id);
+});
+```
+
+#### Database Setup for Different Databases
+
+**MongoDB Example:**
+
+```typescript
+import { MongoClient, Db } from 'mongodb';
+
+export class MongoDBHelper {
+  private client: MongoClient;
+  private db: Db | null = null;
+
+  constructor(uri?: string, dbName?: string) {
+    const connectionString = uri || process.env.MONGO_URI || 'mongodb://localhost:27017';
+    this.client = new MongoClient(connectionString);
+    this.dbName = dbName || process.env.MONGO_DB_NAME || 'testdb';
+  }
+
+  async connect(): Promise<void> {
+    await this.client.connect();
+    this.db = this.client.db(this.dbName);
+    console.log('✓ MongoDB connected');
+  }
+
+  async disconnect(): Promise<void> {
+    await this.client.close();
+    console.log('✓ MongoDB disconnected');
+  }
+
+  async insertOne(collection: string, document: any): Promise<any> {
+    const result = await this.db!.collection(collection).insertOne(document);
+    return result.insertedId;
+  }
+
+  async findOne(collection: string, query: any): Promise<any> {
+    return await this.db!.collection(collection).findOne(query);
+  }
+
+  async deleteMany(collection: string, query: any): Promise<number> {
+    const result = await this.db!.collection(collection).deleteMany(query);
+    return result.deletedCount;
+  }
+
+  async clearCollection(collection: string): Promise<void> {
+    await this.db!.collection(collection).deleteMany({});
+    console.log(`✓ Collection ${collection} cleared`);
+  }
+}
+
+// Usage
+test('should create user in MongoDB', async ({ request }) => {
+  const mongoHelper = new MongoDBHelper();
+  await mongoHelper.connect();
+
+  const response = await request.post('/users', {
+    data: { name: 'John', email: 'john@example.com' }
+  });
+
+  const user = await response.json();
+
+  // Verify in MongoDB
+  const dbUser = await mongoHelper.findOne('users', { _id: user.id });
+  expect(dbUser.name).toBe('John');
+
+  await mongoHelper.disconnect();
+});
+```
+
+**MySQL Example:**
+
+```typescript
+import mysql from 'mysql2/promise';
+
+export class MySQLHelper {
+  private connection: mysql.Connection | null = null;
+
+  async connect(): Promise<void> {
+    this.connection = await mysql.createConnection({
+      host: process.env.DB_HOST || 'localhost',
+      user: process.env.DB_USER || 'root',
+      password: process.env.DB_PASSWORD || 'password',
+      database: process.env.DB_NAME || 'testdb'
+    });
+    console.log('✓ MySQL connected');
+  }
+
+  async disconnect(): Promise<void> {
+    await this.connection?.end();
+    console.log('✓ MySQL disconnected');
+  }
+
+  async query(sql: string, params?: any[]): Promise<any> {
+    const [rows] = await this.connection!.execute(sql, params);
+    return rows;
+  }
+
+  async executeQuery(sql: string, params?: any[]): Promise<number> {
+    const [result]: any = await this.connection!.execute(sql, params);
+    return result.affectedRows;
+  }
+}
+```
+
+#### Best Practices for Database Testing
+
+**1. Use Transactions for Test Isolation:**
+
+```typescript
+export class DatabaseHelper {
+  async beginTransaction(): Promise<void> {
+    await this.client.query('BEGIN');
+  }
+
+  async rollback(): Promise<void> {
+    await this.client.query('ROLLBACK');
+  }
+
+  async commit(): Promise<void> {
+    await this.client.query('COMMIT');
+  }
+}
+
+// Usage
+test('should rollback database changes', async ({ request }) => {
+  await dbHelper.beginTransaction();
+
+  try {
+    // Perform test operations
+    await request.post('/users', { data: { name: 'Test', email: 'test@example.com' } });
+
+    // Test assertions
+    // ...
+  } finally {
+    // Always rollback to clean state
+    await dbHelper.rollback();
+  }
+});
+```
+
+**2. Use Database Fixtures:**
+
+```typescript
+// fixtures/database.fixture.ts
+export class DatabaseFixture {
+  static async setupUserData(dbHelper: DatabaseHelper): Promise<number[]> {
+    const userIds = [];
+
+    const users = [
+      { name: 'User 1', email: 'user1@example.com' },
+      { name: 'User 2', email: 'user2@example.com' },
+      { name: 'User 3', email: 'user3@example.com' }
+    ];
+
+    for (const user of users) {
+      const id = await dbHelper.insertUser(user);
+      userIds.push(id);
+    }
+
+    return userIds;
+  }
+
+  static async cleanupUserData(dbHelper: DatabaseHelper, userIds: number[]): Promise<void> {
+    for (const id of userIds) {
+      await dbHelper.deleteUser(id);
+    }
+  }
+}
+
+// Usage in tests
+test('should fetch users with database fixture', async ({ request }) => {
+  const userIds = await DatabaseFixture.setupUserData(dbHelper);
+
+  const response = await request.get('/users');
+  const users = await response.json();
+
+  expect(users.length).toBeGreaterThanOrEqual(3);
+
+  await DatabaseFixture.cleanupUserData(dbHelper, userIds);
+});
+```
+
+**3. Environment-Specific Database Configuration:**
+
+```typescript
+// config/database.config.ts
+export class DatabaseConfig {
+  static getConfig() {
+    const env = process.env.TEST_ENV || 'development';
+
+    const configs = {
+      development: {
+        host: 'localhost',
+        port: 5432,
+        database: 'dev_db',
+        user: 'dev_user',
+        password: 'dev_pass'
+      },
+      test: {
+        host: 'localhost',
+        port: 5433,
+        database: 'test_db',
+        user: 'test_user',
+        password: 'test_pass'
+      },
+      ci: {
+        host: process.env.DB_HOST,
+        port: parseInt(process.env.DB_PORT || '5432'),
+        database: process.env.DB_NAME,
+        user: process.env.DB_USER,
+        password: process.env.DB_PASSWORD
+      }
+    };
+
+    return configs[env] || configs.development;
+  }
+}
+
+// Usage
+const dbHelper = new DatabaseHelper(DatabaseConfig.getConfig());
+```
+
+---
+
+## Using API Tests to Complement UI Tests
+
+API tests are significantly faster than UI tests. By combining both approaches, you can create a comprehensive and efficient test strategy.
+
+### Why Combine API and UI Tests?
+
+| Aspect | API Tests | UI Tests |
+|--------|-----------|----------|
+| **Speed** | ⚡ Very fast (milliseconds) | 🐌 Slow (seconds) |
+| **Reliability** | ✅ Highly reliable | ⚠️ Can be flaky |
+| **Coverage** | ✅ Backend logic | ✅ User experience |
+| **Debugging** | ✅ Easy to debug | ⚠️ Harder to debug |
+| **Maintenance** | ✅ Low maintenance | ⚠️ Higher maintenance |
+| **Setup Cost** | 🟢 Low | 🟡 Medium-High |
+
+**Best Strategy:** Use API tests for data setup/teardown and backend validation, UI tests for critical user journeys.
+
+### Pattern 1: API Setup for UI Tests
+
+Use APIs to set up test data before UI tests, making UI tests faster and more reliable.
+
+**Example: E-commerce Checkout Test**
+
+```typescript
+import { test, expect } from '@playwright/test';
+
+test.describe('E-commerce Checkout', () => {
+  let userId: string;
+  let productId: string;
+  let authToken: string;
+
+  test.beforeEach(async ({ request, page }) => {
+    // Step 1: Create user via API (fast)
+    const userResponse = await request.post('/api/users', {
+      data: {
+        name: 'Test User',
+        email: `test${Date.now()}@example.com`,
+        password: 'Test123!'
+      }
+    });
+    const user = await userResponse.json();
+    userId = user.id;
+
+    // Step 2: Login via API to get auth token
+    const loginResponse = await request.post('/api/auth/login', {
+      data: {
+        email: user.email,
+        password: 'Test123!'
+      }
+    });
+    const loginData = await loginResponse.json();
+    authToken = loginData.token;
+
+    // Step 3: Create product via API
+    const productResponse = await request.post('/api/products', {
+      headers: {
+        'Authorization': `Bearer ${authToken}`
+      },
+      data: {
+        name: 'Test Product',
+        price: 29.99,
+        stock: 100
+      }
+    });
+    const product = await productResponse.json();
+    productId = product.id;
+
+    // Step 4: Add product to cart via API
+    await request.post(`/api/users/${userId}/cart`, {
+      headers: {
+        'Authorization': `Bearer ${authToken}`
+      },
+      data: {
+        productId: productId,
+        quantity: 2
+      }
+    });
+
+    // Step 5: Set auth cookie for UI test
+    await page.context().addCookies([{
+      name: 'auth_token',
+      value: authToken,
+      domain: 'localhost',
+      path: '/'
+    }]);
+  });
+
+  test('should complete checkout flow', async ({ page }) => {
+    // Now the UI test starts with data already set up
+    await page.goto('/checkout');
+
+    // Verify cart items (UI validation)
+    await expect(page.locator('.cart-item')).toHaveCount(1);
+    await expect(page.locator('.product-name')).toHaveText('Test Product');
+    await expect(page.locator('.product-quantity')).toHaveText('2');
+
+    // Fill checkout form
+    await page.fill('#shipping-address', '123 Test St');
+    await page.fill('#city', 'Test City');
+    await page.fill('#zip', '12345');
+
+    // Complete purchase
+    await page.click('#complete-purchase');
+
+    // Verify success message
+    await expect(page.locator('.success-message')).toBeVisible();
+  });
+
+  test.afterEach(async ({ request }) => {
+    // Cleanup via API (fast)
+    await request.delete(`/api/users/${userId}`, {
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+    await request.delete(`/api/products/${productId}`, {
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+  });
+});
+```
+
+### Pattern 2: API Verification After UI Actions
+
+Use API tests to verify that UI actions correctly updated the backend.
+
+**Example: User Profile Update**
+
+```typescript
+test('should update user profile via UI and verify via API', async ({ page, request }) => {
+  // Setup
+  const userResponse = await request.post('/api/users', {
+    data: { name: 'John Doe', email: 'john@example.com', password: 'Pass123!' }
+  });
+  const user = await userResponse.json();
+
+  // Login via UI
+  await page.goto('/login');
+  await page.fill('#email', 'john@example.com');
+  await page.fill('#password', 'Pass123!');
+  await page.click('#login-button');
+
+  // Update profile via UI
+  await page.goto('/profile');
+  await page.fill('#name', 'John Updated');
+  await page.fill('#phone', '555-1234');
+  await page.click('#save-profile');
+
+  // Verify success message in UI
+  await expect(page.locator('.success-message')).toBeVisible();
+
+  // Verify changes in backend via API
+  const verifyResponse = await request.get(`/api/users/${user.id}`);
+  const updatedUser = await verifyResponse.json();
+
+  expect(updatedUser.name).toBe('John Updated');
+  expect(updatedUser.phone).toBe('555-1234');
+  expect(updatedUser.email).toBe('john@example.com'); // Unchanged
+
+  // Cleanup
+  await request.delete(`/api/users/${user.id}`);
+});
+```
+
+### Pattern 3: Hybrid Test Strategy
+
+Combine API and UI tests in a single test for comprehensive coverage.
+
+**Example: Blog Post Creation**
+
+```typescript
+test('should create, edit, and delete blog post', async ({ page, request }) => {
+  let postId: string;
+  let authToken: string;
+
+  // Step 1: Setup user via API
+  const authResponse = await request.post('/api/auth/login', {
+    data: { email: 'blogger@example.com', password: 'BlogPass123!' }
+  });
+  authToken = (await authResponse.json()).token;
+
+  // Step 2: Create blog post via UI
+  await page.goto('/dashboard');
+  await page.click('#new-post');
+  await page.fill('#post-title', 'My Test Blog Post');
+  await page.fill('#post-content', 'This is test content for my blog post.');
+  await page.selectOption('#post-category', 'Technology');
+  await page.click('#publish-post');
+
+  // Verify UI shows success
+  await expect(page.locator('.success-notification')).toBeVisible();
+
+  // Step 3: Verify post created in backend via API
+  const postsResponse = await request.get('/api/posts?author=blogger@example.com', {
+    headers: { 'Authorization': `Bearer ${authToken}` }
+  });
+  const posts = await postsResponse.json();
+
+  expect(posts.length).toBeGreaterThan(0);
+
+  const createdPost = posts.find(p => p.title === 'My Test Blog Post');
+  expect(createdPost).toBeTruthy();
+  expect(createdPost.content).toContain('This is test content');
+  expect(createdPost.category).toBe('Technology');
+
+  postId = createdPost.id;
+
+  // Step 4: Edit post via API (faster than UI)
+  await request.patch(`/api/posts/${postId}`, {
+    headers: { 'Authorization': `Bearer ${authToken}` },
+    data: {
+      title: 'My Updated Blog Post',
+      content: 'Updated content with more information.'
+    }
+  });
+
+  // Step 5: Verify changes appear in UI
+  await page.reload();
+  await expect(page.locator('.post-title')).toHaveText('My Updated Blog Post');
+  await expect(page.locator('.post-content')).toContain('Updated content');
+
+  // Step 6: Delete via API (cleanup)
+  await request.delete(`/api/posts/${postId}`, {
+    headers: { 'Authorization': `Bearer ${authToken}` }
+  });
+
+  // Verify deletion in UI
+  await page.reload();
+  await expect(page.locator(`[data-post-id="${postId}"]`)).not.toBeVisible();
+});
+```
+
+### Pattern 4: API for Test Data Seeding
+
+Create multiple records via API to test UI list/table functionality.
+
+**Example: User Management Dashboard**
+
+```typescript
+test('should display and filter users in dashboard', async ({ page, request }) => {
+  const authToken = await getAdminAuthToken(request);
+  const userIds: string[] = [];
+
+  // Seed multiple users via API
+  const usersToCreate = [
+    { name: 'Alice Smith', email: 'alice@example.com', role: 'Admin', status: 'Active' },
+    { name: 'Bob Johnson', email: 'bob@example.com', role: 'User', status: 'Active' },
+    { name: 'Charlie Brown', email: 'charlie@example.com', role: 'User', status: 'Inactive' },
+    { name: 'Diana Prince', email: 'diana@example.com', role: 'Editor', status: 'Active' },
+    { name: 'Eve Wilson', email: 'eve@example.com', role: 'User', status: 'Active' }
+  ];
+
+  for (const userData of usersToCreate) {
+    const response = await request.post('/api/users', {
+      headers: { 'Authorization': `Bearer ${authToken}` },
+      data: userData
+    });
+    const user = await response.json();
+    userIds.push(user.id);
+  }
+
+  // Test UI with seeded data
+  await page.goto('/admin/users');
+
+  // Verify all users are displayed
+  await expect(page.locator('.user-row')).toHaveCount(5);
+
+  // Test filtering by role
+  await page.selectOption('#role-filter', 'User');
+  await expect(page.locator('.user-row')).toHaveCount(3);
+
+  // Test filtering by status
+  await page.selectOption('#status-filter', 'Active');
+  await expect(page.locator('.user-row')).toHaveCount(2);
+
+  // Test search
+  await page.fill('#search-input', 'Alice');
+  await expect(page.locator('.user-row')).toHaveCount(1);
+  await expect(page.locator('.user-name')).toHaveText('Alice Smith');
+
+  // Cleanup via API
+  for (const userId of userIds) {
+    await request.delete(`/api/users/${userId}`, {
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+  }
+});
+```
+
+### Pattern 5: API for Performance Optimization
+
+Use API to set up complex test scenarios quickly.
+
+**Example: Shopping Cart with Many Items**
+
+```typescript
+test('should handle cart with 50 items', async ({ page, request }) => {
+  const authToken = await getUserAuthToken(request);
+  const userId = await getUserId(request, authToken);
+
+  // Add 50 items to cart via API (would be very slow via UI)
+  const productIds: string[] = [];
+
+  for (let i = 1; i <= 50; i++) {
+    // Create product
+    const productResponse = await request.post('/api/products', {
+      headers: { 'Authorization': `Bearer ${authToken}` },
+      data: {
+        name: `Test Product ${i}`,
+        price: 9.99 + i,
+        stock: 100
+      }
+    });
+    const product = await productResponse.json();
+    productIds.push(product.id);
+
+    // Add to cart
+    await request.post(`/api/users/${userId}/cart`, {
+      headers: { 'Authorization': `Bearer ${authToken}` },
+      data: {
+        productId: product.id,
+        quantity: 1
+      }
+    });
+  }
+
+  // Now test UI with 50 items in cart
+  await page.goto('/cart');
+
+  // Verify cart displays correctly
+  await expect(page.locator('.cart-item')).toHaveCount(50);
+
+  // Test pagination
+  await expect(page.locator('.pagination')).toBeVisible();
+
+  // Test total calculation
+  const totalText = await page.locator('.cart-total').textContent();
+  expect(totalText).toContain('$'); // Verify total is displayed
+
+  // Cleanup
+  for (const productId of productIds) {
+    await request.delete(`/api/products/${productId}`, {
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+  }
+});
+```
+
+### Pattern 6: API State Verification During UI Flow
+
+Verify backend state at various points during a UI workflow.
+
+**Example: Multi-Step Form**
+
+```typescript
+test('should save form progress at each step', async ({ page, request }) => {
+  const authToken = await getUserAuthToken(request);
+  let applicationId: string;
+
+  // Start application via UI
+  await page.goto('/applications/new');
+
+  // Step 1: Personal Information
+  await page.fill('#firstName', 'John');
+  await page.fill('#lastName', 'Doe');
+  await page.fill('#email', 'john@example.com');
+  await page.click('#next-step');
+
+  // Verify Step 1 saved via API
+  const step1Response = await request.get('/api/applications/current', {
+    headers: { 'Authorization': `Bearer ${authToken}` }
+  });
+  const step1Data = await step1Response.json();
+
+  expect(step1Data.firstName).toBe('John');
+  expect(step1Data.lastName).toBe('Doe');
+  expect(step1Data.currentStep).toBe(2);
+
+  applicationId = step1Data.id;
+
+  // Step 2: Address Information
+  await page.fill('#address', '123 Main St');
+  await page.fill('#city', 'Anytown');
+  await page.fill('#zipCode', '12345');
+  await page.click('#next-step');
+
+  // Verify Step 2 saved via API
+  const step2Response = await request.get(`/api/applications/${applicationId}`, {
+    headers: { 'Authorization': `Bearer ${authToken}` }
+  });
+  const step2Data = await step2Response.json();
+
+  expect(step2Data.address).toBe('123 Main St');
+  expect(step2Data.city).toBe('Anytown');
+  expect(step2Data.currentStep).toBe(3);
+
+  // Step 3: Review and Submit
+  await page.click('#submit-application');
+
+  // Verify application submitted via API
+  const finalResponse = await request.get(`/api/applications/${applicationId}`, {
+    headers: { 'Authorization': `Bearer ${authToken}` }
+  });
+  const finalData = await finalResponse.json();
+
+  expect(finalData.status).toBe('submitted');
+  expect(finalData.submittedAt).toBeTruthy();
+
+  // Cleanup
+  await request.delete(`/api/applications/${applicationId}`, {
+    headers: { 'Authorization': `Bearer ${authToken}` }
+  });
+});
+```
+
+### Pattern 7: API for Concurrent User Testing
+
+Simulate multiple users via API while testing UI for one user.
+
+**Example: Real-time Collaboration**
+
+```typescript
+test('should show real-time updates from other users', async ({ page, request }) => {
+  const user1Token = await getUserAuthToken(request, 'user1@example.com', 'pass1');
+  const user2Token = await getUserAuthToken(request, 'user2@example.com', 'pass2');
+
+  const documentId = await createDocument(request, user1Token, 'Shared Document');
+
+  // User 1 opens document in UI
+  await page.goto(`/documents/${documentId}`);
+  await expect(page.locator('.document-title')).toHaveText('Shared Document');
+
+  // User 2 edits document via API (simulating concurrent user)
+  await request.patch(`/api/documents/${documentId}`, {
+    headers: { 'Authorization': `Bearer ${user2Token}` },
+    data: {
+      content: 'User 2 added this content',
+      lastEditedBy: 'user2@example.com'
+    }
+  });
+
+  // Verify User 1 sees the update in UI (real-time or after refresh)
+  await page.waitForTimeout(2000); // Wait for real-time update
+
+  await expect(page.locator('.document-content')).toContain('User 2 added this content');
+  await expect(page.locator('.last-edited-by')).toHaveText('user2@example.com');
+
+  // Cleanup
+  await request.delete(`/api/documents/${documentId}`, {
+    headers: { 'Authorization': `Bearer ${user1Token}` }
+  });
+});
+```
+
+### Helper Functions for API + UI Tests
+
+Create reusable helper functions:
+
+```typescript
+// helpers/TestSetupHelpers.ts
+export class TestSetupHelpers {
+  static async createAuthenticatedUser(
+    request: APIRequestContext,
+    userData?: Partial<{ name: string; email: string; password: string }>
+  ): Promise<{ userId: string; token: string; email: string }> {
+    const user = {
+      name: userData?.name || 'Test User',
+      email: userData?.email || `test${Date.now()}@example.com`,
+      password: userData?.password || 'TestPass123!'
+    };
+
+    const createResponse = await request.post('/api/users', { data: user });
+    const createdUser = await createResponse.json();
+
+    const loginResponse = await request.post('/api/auth/login', {
+      data: { email: user.email, password: user.password }
+    });
+    const loginData = await loginResponse.json();
+
+    return {
+      userId: createdUser.id,
+      token: loginData.token,
+      email: user.email
+    };
+  }
+
+  static async setupUserSession(
+    page: Page,
+    token: string,
+    domain: string = 'localhost'
+  ): Promise<void> {
+    await page.context().addCookies([{
+      name: 'auth_token',
+      value: token,
+      domain: domain,
+      path: '/'
+    }]);
+  }
+
+  static async seedProducts(
+    request: APIRequestContext,
+    count: number,
+    authToken: string
+  ): Promise<string[]> {
+    const productIds: string[] = [];
+
+    for (let i = 1; i <= count; i++) {
+      const response = await request.post('/api/products', {
+        headers: { 'Authorization': `Bearer ${authToken}` },
+        data: {
+          name: `Test Product ${i}`,
+          price: 10 + i,
+          stock: 100
+        }
+      });
+      const product = await response.json();
+      productIds.push(product.id);
+    }
+
+    return productIds;
+  }
+
+  static async cleanupEntities(
+    request: APIRequestContext,
+    entityType: string,
+    ids: string[],
+    authToken: string
+  ): Promise<void> {
+    for (const id of ids) {
+      await request.delete(`/api/${entityType}/${id}`, {
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      });
+    }
+  }
+}
+
+// Usage in tests
+test('using helper functions', async ({ page, request }) => {
+  const { userId, token } = await TestSetupHelpers.createAuthenticatedUser(request);
+  await TestSetupHelpers.setupUserSession(page, token);
+
+  const productIds = await TestSetupHelpers.seedProducts(request, 10, token);
+
+  // Perform UI tests
+  await page.goto('/products');
+  await expect(page.locator('.product-card')).toHaveCount(10);
+
+  // Cleanup
+  await TestSetupHelpers.cleanupEntities(request, 'products', productIds, token);
+  await TestSetupHelpers.cleanupEntities(request, 'users', [userId], token);
+});
+```
+
+### Best Practices for API + UI Testing
+
+1. **Use API for Setup and Cleanup**
+   - Always prefer API for test data creation
+   - Use API for teardown to ensure clean state
+   - Avoid creating data through UI unless testing that specific flow
+
+2. **Verify Critical Paths with Both**
+   - Use UI to test user experience
+   - Use API to verify backend state
+   - Combine both for comprehensive coverage
+
+3. **Optimize Test Speed**
+   - Minimize UI interactions
+   - Use API for bulk operations
+   - Run API tests in parallel
+
+4. **Maintain Test Independence**
+   - Each test should set up its own data
+   - Clean up after each test
+   - Don't rely on test execution order
+
+5. **Use Appropriate Tools for Each Layer**
+   ```typescript
+   // Good: API for data setup
+   await request.post('/api/users', { data: userData });
+
+   // Then UI for user journey
+   await page.goto('/dashboard');
+   await page.click('#profile-link');
+
+   // Then API to verify backend
+   const user = await request.get(`/api/users/${userId}`);
+   ```
+
 ---
 
 ## Best Practices
@@ -3107,10 +4259,14 @@ In this guide, you learned:
 ✅ Using framework components (ApiClient, RequestBuilder, validators)
 ✅ Managing test data and generating random data
 ✅ Advanced topics (authentication, chaining, parallel requests)
+✅ **Database integration testing with Playwright**
+✅ **Using API tests to complement UI tests for faster, more reliable testing**
+✅ **Hybrid testing strategies combining API and UI tests**
 ✅ Best practices for maintainable tests
 ✅ Common patterns and troubleshooting
+✅ Comprehensive test reporting with Playwright HTML and Allure
 
-You're now ready to build comprehensive API test suites with Playwright!
+You're now ready to build comprehensive API test suites with Playwright, integrate database verification, and create efficient hybrid testing strategies!
 
 ---
 
