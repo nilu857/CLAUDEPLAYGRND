@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Link Organizer - Your Second Brain</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 10px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+
+        .subtitle {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .tabs {
+            display: flex;
+            background: #f5f5f5;
+            border-bottom: 2px solid #e0e0e0;
+            overflow-x: auto;
+        }
+
+        .tab {
+            padding: 15px 20px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-size: 14px;
+            white-space: nowrap;
+            transition: all 0.3s;
+        }
+
+        .tab.active {
+            background: white;
+            border-bottom: 3px solid #667eea;
+            font-weight: bold;
+        }
+
+        .content {
+            padding: 20px;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #333;
+            font-size: 14px;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 10px;
+            transition: transform 0.2s;
+        }
+
+        .btn:active {
+            transform: scale(0.98);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+        }
+
+        .link-card {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+        }
+
+        .link-card.priority-critical {
+            border-left-color: #dc3545;
+        }
+
+        .link-card.priority-high {
+            border-left-color: #fd7e14;
+        }
+
+        .link-card.priority-medium {
+            border-left-color: #ffc107;
+        }
+
+        .link-card.priority-low {
+            border-left-color: #28a745;
+        }
+
+        .link-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #333;
+        }
+
+        .link-url {
+            font-size: 12px;
+            color: #667eea;
+            word-break: break-all;
+            margin-bottom: 8px;
+        }
+
+        .link-meta {
+            font-size: 12px;
+            color: #666;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .tag {
+            display: inline-block;
+            background: #e0e0e0;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            margin-right: 5px;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .badge-critical { background: #dc3545; color: white; }
+        .badge-high { background: #fd7e14; color: white; }
+        .badge-medium { background: #ffc107; color: black; }
+        .badge-low { background: #28a745; color: white; }
+
+        .search-box {
+            position: relative;
+            margin-bottom: 20px;
+        }
+
+        .search-box input {
+            padding-left: 40px;
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 18px;
+        }
+
+        .filter-group {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 32px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            opacity: 0.9;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                border-radius: 0;
+            }
+
+            header {
+                padding: 15px;
+            }
+
+            h1 {
+                font-size: 20px;
+            }
+
+            .content {
+                padding: 15px;
+            }
+
+            .tab {
+                padding: 12px 15px;
+                font-size: 13px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📚 Link Organizer</h1>
+            <div class="subtitle">Your Second Brain</div>
+        </header>
+
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('dashboard')">📊 Dashboard</button>
+            <button class="tab" onclick="showTab('add')">➕ Add Link</button>
+            <button class="tab" onclick="showTab('browse')">🔍 Browse</button>
+            <button class="tab" onclick="showTab('sync')">🔄 Sync</button>
+        </div>
+
+        <div class="content">
+            <!-- Dashboard Tab -->
+            <div id="dashboard-tab" class="tab-content active">
+                <div class="stats-grid" id="stats-container">
+                    <!-- Stats will be populated by JavaScript -->
+                </div>
+                <h3 style="margin: 20px 0 10px 0;">Recent Links</h3>
+                <div id="recent-links"></div>
+            </div>
+
+            <!-- Add Link Tab -->
+            <div id="add-tab" class="tab-content">
+                <form id="add-link-form">
+                    <div class="form-group">
+                        <label>URL *</label>
+                        <input type="url" id="url" required placeholder="https://example.com">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Title *</label>
+                        <input type="text" id="title" required placeholder="Descriptive title">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Type *</label>
+                        <select id="type" required>
+                            <option value="video">📹 Video</option>
+                            <option value="tweet">🐦 Tweet</option>
+                            <option value="article">📰 Article</option>
+                            <option value="document">📄 Document</option>
+                            <option value="podcast">🎙️ Podcast</option>
+                            <option value="tool">🔧 Tool</option>
+                            <option value="course">📚 Course</option>
+                            <option value="other">📎 Other</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Category *</label>
+                        <input type="text" id="category" required placeholder="Programming, Education, etc.">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Life Area</label>
+                        <select id="lifeArea">
+                            <option value="">Select...</option>
+                            <option value="personal">🧘 Personal</option>
+                            <option value="work">💼 Work</option>
+                            <option value="family">👨‍👩‍👧 Family</option>
+                            <option value="education">🎓 Education</option>
+                            <option value="health">💪 Health</option>
+                            <option value="finance">💰 Finance</option>
+                            <option value="hobby">🎨 Hobby</option>
+                            <option value="other">📦 Other</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Person (e.g., daughter, me)</label>
+                        <input type="text" id="person" placeholder="Who is this for?">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Project</label>
+                        <input type="text" id="project" placeholder="Associated project name">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Priority</label>
+                        <select id="priority">
+                            <option value="">None</option>
+                            <option value="critical">🔴 Critical</option>
+                            <option value="high">🟠 High</option>
+                            <option value="medium">🟡 Medium</option>
+                            <option value="low">🟢 Low</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Status</label>
+                        <select id="status">
+                            <option value="">None</option>
+                            <option value="to-review">📋 To Review</option>
+                            <option value="in-progress">⏳ In Progress</option>
+                            <option value="completed">✅ Completed</option>
+                            <option value="archived">📦 Archived</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Tags (comma-separated)</label>
+                        <input type="text" id="tags" placeholder="typescript, tutorial, beginner">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Notes</label>
+                        <textarea id="notes" placeholder="Add your notes here..."></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="favorite"> ⭐ Mark as Favorite
+                        </label>
+                    </div>
+
+                    <button type="submit" class="btn">Add Link</button>
+                </form>
+            </div>
+
+            <!-- Browse Tab -->
+            <div id="browse-tab" class="tab-content">
+                <div class="search-box">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" id="search-input" placeholder="Search across all fields...">
+                </div>
+
+                <div class="filter-group">
+                    <select id="filter-lifeArea" onchange="filterLinks()">
+                        <option value="">All Life Areas</option>
+                        <option value="personal">🧘 Personal</option>
+                        <option value="work">💼 Work</option>
+                        <option value="family">👨‍👩‍👧 Family</option>
+                        <option value="education">🎓 Education</option>
+                        <option value="health">💪 Health</option>
+                        <option value="finance">💰 Finance</option>
+                        <option value="hobby">🎨 Hobby</option>
+                    </select>
+
+                    <select id="filter-priority" onchange="filterLinks()">
+                        <option value="">All Priorities</option>
+                        <option value="critical">🔴 Critical</option>
+                        <option value="high">🟠 High</option>
+                        <option value="medium">🟡 Medium</option>
+                        <option value="low">🟢 Low</option>
+                    </select>
+
+                    <select id="filter-type" onchange="filterLinks()">
+                        <option value="">All Types</option>
+                        <option value="video">📹 Video</option>
+                        <option value="tweet">🐦 Tweet</option>
+                        <option value="article">📰 Article</option>
+                        <option value="course">📚 Course</option>
+                    </select>
+                </div>
+
+                <div id="links-container"></div>
+            </div>
+
+            <!-- Sync Tab -->
+            <div id="sync-tab" class="tab-content">
+                <h3>Load Data</h3>
+                <p style="color: #666; margin-bottom: 15px;">
+                    Copy the contents of your <code>data/links.json</code> file and paste below:
+                </p>
+                <textarea id="import-data" style="height: 200px; font-family: monospace; font-size: 12px;" placeholder='[{"url": "...", "title": "..."}]'></textarea>
+                <button class="btn" onclick="loadData()">Load Links</button>
+
+                <h3 style="margin-top: 30px;">Export Data</h3>
+                <p style="color: #666; margin-bottom: 15px;">
+                    Copy the text below and save it to <code>data/links.json</code>:
+                </p>
+                <textarea id="export-data" style="height: 200px; font-family: monospace; font-size: 12px;" readonly></textarea>
+                <button class="btn btn-secondary" onclick="exportData()">Generate Export</button>
+                <button class="btn" onclick="copyToClipboard()">📋 Copy to Clipboard</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let links = [];
+
+        // Load from localStorage on start
+        function init() {
+            const saved = localStorage.getItem('linkOrganizerData');
+            if (saved) {
+                try {
+                    links = JSON.parse(saved);
+                } catch (e) {
+                    links = [];
+                }
+            }
+            updateDashboard();
+            renderLinks();
+        }
+
+        // Tab switching
+        function showTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+
+            event.target.classList.add('active');
+            document.getElementById(tabName + '-tab').classList.add('active');
+
+            if (tabName === 'browse') {
+                renderLinks();
+            }
+        }
+
+        // Add link form submission
+        document.getElementById('add-link-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+
+            const newLink = {
+                id: 'link_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                url: document.getElementById('url').value,
+                title: document.getElementById('title').value,
+                type: document.getElementById('type').value,
+                category: document.getElementById('category').value,
+                tags: document.getElementById('tags').value.split(',').map(t => t.trim()).filter(t => t),
+                lifeArea: document.getElementById('lifeArea').value || undefined,
+                person: document.getElementById('person').value || undefined,
+                project: document.getElementById('project').value || undefined,
+                priority: document.getElementById('priority').value || undefined,
+                status: document.getElementById('status').value || undefined,
+                notes: document.getElementById('notes').value || undefined,
+                favorite: document.getElementById('favorite').checked,
+                dateAdded: new Date().toISOString(),
+                lastModified: new Date().toISOString()
+            };
+
+            links.push(newLink);
+            saveToStorage();
+            e.target.reset();
+            alert('✅ Link added successfully!');
+            updateDashboard();
+        });
+
+        // Search functionality
+        document.getElementById('search-input').addEventListener('input', (e) => {
+            renderLinks(e.target.value);
+        });
+
+        // Render links
+        function renderLinks(searchTerm = '') {
+            const container = document.getElementById('links-container');
+            const lifeAreaFilter = document.getElementById('filter-lifeArea').value;
+            const priorityFilter = document.getElementById('filter-priority').value;
+            const typeFilter = document.getElementById('filter-type').value;
+
+            let filtered = links;
+
+            // Apply search
+            if (searchTerm) {
+                const term = searchTerm.toLowerCase();
+                filtered = filtered.filter(link =>
+                    link.title.toLowerCase().includes(term) ||
+                    link.url.toLowerCase().includes(term) ||
+                    (link.notes && link.notes.toLowerCase().includes(term)) ||
+                    link.tags.some(tag => tag.toLowerCase().includes(term))
+                );
+            }
+
+            // Apply filters
+            if (lifeAreaFilter) {
+                filtered = filtered.filter(link => link.lifeArea === lifeAreaFilter);
+            }
+            if (priorityFilter) {
+                filtered = filtered.filter(link => link.priority === priorityFilter);
+            }
+            if (typeFilter) {
+                filtered = filtered.filter(link => link.type === typeFilter);
+            }
+
+            // Sort by date added (newest first)
+            filtered.sort((a, b) => new Date(b.dateAdded) - new Date(a.dateAdded));
+
+            if (filtered.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">🔍</div>
+                        <div>No links found</div>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = filtered.map(link => `
+                <div class="link-card priority-${link.priority || 'none'}">
+                    <div class="link-title">
+                        ${link.favorite ? '⭐ ' : ''}${link.title}
+                    </div>
+                    <a href="${link.url}" target="_blank" class="link-url">${link.url}</a>
+                    <div class="link-meta">
+                        <span>${link.type}</span>
+                        ${link.lifeArea ? `<span>📁 ${link.lifeArea}</span>` : ''}
+                        ${link.person ? `<span>👤 ${link.person}</span>` : ''}
+                        ${link.priority ? `<span class="badge badge-${link.priority}">${link.priority}</span>` : ''}
+                        ${link.status ? `<span>${link.status}</span>` : ''}
+                    </div>
+                    ${link.tags.length > 0 ? `<div style="margin-top: 8px;">${link.tags.map(tag => `<span class="tag">${tag}</span>`).join('')}</div>` : ''}
+                    ${link.notes ? `<div style="margin-top: 8px; font-size: 13px; color: #666;">${link.notes}</div>` : ''}
+                </div>
+            `).join('');
+        }
+
+        function filterLinks() {
+            renderLinks(document.getElementById('search-input').value);
+        }
+
+        // Update dashboard
+        function updateDashboard() {
+            const stats = {
+                total: links.length,
+                favorites: links.filter(l => l.favorite).length,
+                work: links.filter(l => l.lifeArea === 'work').length,
+                family: links.filter(l => l.lifeArea === 'family').length,
+                personal: links.filter(l => l.lifeArea === 'personal').length,
+                highPriority: links.filter(l => l.priority === 'critical' || l.priority === 'high').length
+            };
+
+            document.getElementById('stats-container').innerHTML = `
+                <div class="stat-card">
+                    <div class="stat-number">${stats.total}</div>
+                    <div class="stat-label">Total Links</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">${stats.favorites}</div>
+                    <div class="stat-label">⭐ Favorites</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">${stats.work}</div>
+                    <div class="stat-label">💼 Work</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">${stats.family}</div>
+                    <div class="stat-label">👨‍👩‍👧 Family</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">${stats.highPriority}</div>
+                    <div class="stat-label">🔴 High Priority</div>
+                </div>
+            `;
+
+            // Show recent links
+            const recent = links.slice().sort((a, b) => new Date(b.dateAdded) - new Date(a.dateAdded)).slice(0, 5);
+            document.getElementById('recent-links').innerHTML = recent.length > 0 ? recent.map(link => `
+                <div class="link-card priority-${link.priority || 'none'}">
+                    <div class="link-title">${link.favorite ? '⭐ ' : ''}${link.title}</div>
+                    <a href="${link.url}" target="_blank" class="link-url">${link.url}</a>
+                </div>
+            `).join('') : '<div class="empty-state"><div>No links yet. Add your first link!</div></div>';
+        }
+
+        // Storage functions
+        function saveToStorage() {
+            localStorage.setItem('linkOrganizerData', JSON.stringify(links));
+        }
+
+        function loadData() {
+            const data = document.getElementById('import-data').value;
+            try {
+                links = JSON.parse(data);
+                saveToStorage();
+                alert('✅ Data loaded successfully!');
+                updateDashboard();
+                renderLinks();
+                document.getElementById('import-data').value = '';
+            } catch (e) {
+                alert('❌ Invalid JSON data. Please check the format.');
+            }
+        }
+
+        function exportData() {
+            document.getElementById('export-data').value = JSON.stringify(links, null, 2);
+        }
+
+        function copyToClipboard() {
+            const text = document.getElementById('export-data').value;
+            navigator.clipboard.writeText(text).then(() => {
+                alert('✅ Copied to clipboard!');
+            });
+        }
+
+        // Initialize on load
+        init();
+    </script>
+</body>
+</html>

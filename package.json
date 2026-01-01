@@ -13,8 +13,11 @@
     "allure:generate": "allure generate ./allure-results --clean -o ./allure-report",
     "allure:serve": "allure serve ./allure-results",
     "links": "npx ts-node utils/link-organizer-cli.ts",
+    "links:web": "npx ts-node utils/web-server.ts",
     "links:example": "npx ts-node examples/link-organizer-example.ts",
-    "links:second-brain": "npx ts-node examples/second-brain-example.ts"
+    "links:second-brain": "npx ts-node examples/second-brain-example.ts",
+    "quick-add": "npx ts-node utils/quick-add.ts",
+    "quick-search": "npx ts-node utils/quick-search.ts"
   },
   "keywords": [
     "playwright",
